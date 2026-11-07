@@ -1,26 +1,217 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --color-slate-950: #0b1017;
+  --color-slate-900: #131a24;
+  --color-slate-800: #1c2531;
+  --color-slate-700: #28323f;
+  --color-slate-600: #3a4553;
+  --color-accent-DEFAULT: #5b8def;
+  --color-accent-glow: #7aa8ff;
+  --color-status-waiting: #94a3b8;
+  --color-status-working: #3b82f6;
+  --color-status-washing: #06b6d4;
+  --color-status-drying: #f59e0b;
+  --color-status-finishing: #a855f7;
+  --color-status-done: #22c55e;
+  --color-status-ready: #10b981;
+  --color-status-taken: #64748b;
+  --shadow-neu: 4px 4px 10px #0a0f15, -4px -4px 10px #1c2633;
+  --shadow-neu-sm: 2px 2px 6px #0a0f15, -2px -2px 6px #1c2633;
+  --shadow-neu-in: inset 4px 4px 10px #0a0f15, inset -4px -4px 10px #1c2633;
+  --shadow-neu-accent:
+    4px 4px 12px rgba(10, 15, 21, 0.8), -4px -4px 12px rgba(42, 58, 82, 0.5);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  body {
+    background: radial-gradient(circle at top left, #131a24, #0b1017 60%);
+    min-height: 100vh;
+    color: #f1f5f9;
+    font-family: "Inter", system-ui, sans-serif;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  .neu-card {
+    background-color: var(--color-slate-900);
+    border-radius: 1rem;
+    box-shadow: var(--shadow-neu);
+    padding: 1.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .neu-card-inset {
+    background-color: var(--color-slate-900);
+    border-radius: 1rem;
+    box-shadow: var(--shadow-neu-in);
+    padding: 1.25rem;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+  }
+  .neu-btn {
+    background-color: var(--color-slate-800);
+    color: #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 0.75rem 1rem;
+    font-weight: 600;
+    box-shadow: var(--shadow-neu);
+    transition: all 150ms;
+    cursor: pointer;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+  }
+  .neu-btn:active {
+    box-shadow: var(--shadow-neu-in);
+    transform: scale(0.96);
+    background-color: var(--color-slate-900);
+  }
+  .neu-btn:disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+  .neu-btn-primary {
+    background-color: var(--color-slate-800);
+    color: var(--color-accent-DEFAULT);
+    border-radius: 0.75rem;
+    padding: 0.75rem 1rem;
+    font-weight: 700;
+    box-shadow: var(--shadow-neu-accent);
+    transition: all 150ms;
+    cursor: pointer;
+    border: 1.5px solid rgba(91, 141, 239, 0.5);
+  }
+  .neu-btn-primary:active {
+    box-shadow: var(--shadow-neu-in);
+    transform: scale(0.96);
+    background-color: var(--color-slate-900);
+  }
+  .neu-input {
+    width: 100%;
+    background-color: var(--color-slate-900);
+    color: #f1f5f9;
+    border-radius: 0.75rem;
+    padding: 0.75rem 1rem;
+    box-shadow: var(--shadow-neu-in);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    outline: none;
+  }
+  .neu-input::placeholder {
+    color: #64748b;
+  }
+  .neu-input:focus {
+    box-shadow:
+      var(--shadow-neu-in),
+      0 0 0 2px rgba(91, 141, 239, 0.4);
+    border-color: rgba(91, 141, 239, 0.5);
+  }
+  .neu-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 9999px;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .neu-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    border-radius: 0.75rem;
+    padding: 0.75rem 1rem;
+    color: #94a3b8;
+    transition: all 150ms;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background-color: transparent;
+  }
+  .neu-nav:active {
+    background-color: var(--color-slate-800);
+  }
+  .neu-nav-active {
+    color: var(--color-accent-DEFAULT);
+    box-shadow: var(--shadow-neu-in);
+    border: 1px solid rgba(91, 141, 239, 0.5);
+    background-color: var(--color-slate-900);
+    font-weight: 600;
+  }
+}
+
+@media (hover: hover) {
+  .neu-btn:hover {
+    color: var(--color-accent-glow);
+    background-color: var(--color-slate-700);
+  }
+  .neu-btn-primary:hover {
+    color: var(--color-accent-glow);
+    border-color: var(--color-accent-glow);
+  }
+  .neu-nav:hover {
+    color: #f1f5f9;
+    box-shadow: var(--shadow-neu-sm);
+  }
+}
+
+/* ==========================================
+   ATURAN CETAK (PRINT) - HANYA LAPORAN
+   ========================================== */
+/* ==========================================
+   ATURAN CETAK (PRINT) - MODAL POPUP BERSIH
+   ========================================== */
+@media print {
+  /* Sembunyikan semua yang ada di body */
+  body * {
+    visibility: hidden !important;
+  }
+
+  /* Tampilkan HANYA print-area dan isinya */
+  .print-area,
+  .print-area * {
+    visibility: visible !important;
+  }
+
+  /* Paksa print-area menempel ke kertas */
+  .print-area {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    z-index: 99999 !important;
+  }
+
+  /* Paksa tinggi elemen di dalam modal jadi otomatis (jangan terpotong) */
+  .print-area > div {
+    position: static !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: white !important;
+  }
+
+  /* Sembunyikan tombol Batal/Cetak di modal */
+  .print-area .print\:hidden {
+    display: none !important;
+  }
+
+  /* Semua teks dan tabel hitam */
+  .print-area * {
+    color: black !important;
+    background: transparent !important;
+  }
+
+  /* Ukuran kertas */
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
 }

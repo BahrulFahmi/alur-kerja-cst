@@ -1,0 +1,236 @@
+"use client";
+import { useState, useEffect } from "react";
+import { createClient } from "@/lib/supabase/client";
+import {
+  Loader2,
+  CheckCircle2,
+  Droplets,
+  Wind,
+  Sparkles,
+  Clock,
+} from "lucide-react";
+import { toast } from "sonner";
+
+const STATUS_LIST = [
+  {
+    value: "sedang_dikerjakan",
+    label: "Sedang Dikerjakan",
+    icon: Clock,
+    color: "text-status-working",
+  },
+  {
+    value: "proses_pencucian",
+    label: "Proses Pencucian",
+    icon: Droplets,
+    color: "text-status-washing",
+  },
+  {
+    value: "proses_pengeringan",
+    label: "Proses Pengeringan",
+    icon: Wind,
+    color: "text-status-drying",
+  },
+  {
+    value: "proses_finishing",
+    label: "Proses Finishing",
+    icon: Sparkles,
+    color: "text-status-finishing",
+  },
+  {
+    value: "selesai_dicuci",
+    label: "Selesai Dicuci",
+    icon: CheckCircle2,
+    color: "text-status-done",
+  },
+];
+
+export default function MyJobsPage() {
+  const supabase = createClient();
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  const fetchJobs = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from("shoe_assignments")
+      .select(
+        `
+        id, assignment_status, assigned_at,
+        shoe:shoes!inner(*, order:orders(invoice_number, customer:customers(name)), treatment:treatments(name))
+      `,
+      )
+      .eq("technician_id", user.id)
+      .eq("assignment_status", "active")
+      .neq("shoe.shoe_status", "selesai_dicuci")
+      .order("assigned_at", { ascending: false });
+
+    if (!error && data) {
+      // PERBAIKAN: Ambil data shoe (jika array, ambil index 0)
+      const formattedJobs = data
+        .map((job: any) => {
+          const shoeData = Array.isArray(job.shoe) ? job.shoe[0] : job.shoe;
+          return { ...job, shoe: shoeData };
+        })
+        .filter((job) => job.shoe); // Buang jika shoe kosong
+
+      // Hapus duplikasi data
+      const uniqueJobs = formattedJobs.filter(
+        (job, index, self) =>
+          index === self.findIndex((j) => j.shoe.id === job.shoe.id),
+      );
+      setJobs(uniqueJobs);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchJobs();
+  }, [supabase]);
+
+  const updateStatus = async (
+    shoeId: string,
+    newStatus: string,
+    previousStatus: string,
+  ) => {
+    setUpdatingId(shoeId);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      await supabase
+        .from("shoes")
+        .update({ shoe_status: newStatus })
+        .eq("id", shoeId);
+      await supabase.from("shoe_status_history").insert({
+        shoe_id: shoeId,
+        previous_status: previousStatus,
+        new_status: newStatus,
+        changed_by: user!.id,
+        notes: `Update status oleh teknisi`,
+      });
+
+      if (newStatus === "selesai_dicuci") {
+        await supabase
+          .from("shoe_assignments")
+          .update({
+            assignment_status: "completed",
+            completed_at: new Date().toISOString(),
+          })
+          .eq("shoe_id", shoeId)
+          .eq("technician_id", user!.id);
+
+        toast.success("Pekerjaan selesai! Sepatu siap dicek kasir.");
+      } else {
+        toast.success("Status berhasil diperbarui!");
+      }
+
+      await fetchJobs();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  if (loading)
+    return (
+      <div className="p-10 flex justify-center">
+        <Loader2 className="animate-spin w-8 h-8 text-accent" />
+      </div>
+    );
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-6 pb-10">
+      <div>
+        <h1 className="text-2xl font-bold">Pekerjaan Saya</h1>
+        <p className="text-slate-400 text-sm">
+          Daftar sepatu yang sedang Anda kerjakan. Update status sesuai tahapan.
+        </p>
+      </div>
+
+      <div className="grid gap-4 mt-6">
+        {jobs.length === 0 ? (
+          <div className="neu-card text-center py-10">
+            <p className="text-slate-400">
+              Tidak ada pekerjaan aktif. Silakan scan QR untuk mengambil
+              pekerjaan baru.
+            </p>
+          </div>
+        ) : (
+          jobs.map((job) => {
+            const shoe = job.shoe;
+            const currentStatus = STATUS_LIST.find(
+              (s) => s.value === shoe.shoe_status,
+            );
+
+            return (
+              <div key={job.id} className="neu-card space-y-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-xs text-accent font-semibold mb-1">
+                      {shoe.order.invoice_number}
+                    </p>
+                    <h3 className="font-bold text-lg">
+                      {shoe.brand} - {shoe.shoe_type}
+                    </h3>
+                    <p className="text-sm text-slate-400">
+                      Pelanggan: {shoe.order.customer.name}
+                    </p>
+                    <p className="text-sm text-slate-400">
+                      Treatment: {shoe.treatment?.name}
+                    </p>
+                  </div>
+                  <div
+                    className={`neu-badge bg-slate-800 ${currentStatus?.color} flex items-center gap-1`}
+                  >
+                    {currentStatus?.icon && (
+                      <currentStatus.icon className="w-3 h-3" />
+                    )}
+                    {currentStatus?.label}
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-700/50 pt-4">
+                  <p className="text-sm font-semibold text-slate-300 mb-3">
+                    Perbarui Status:
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {STATUS_LIST.filter(
+                      (s) => s.value !== shoe.shoe_status,
+                    ).map((statusOpt) => (
+                      <button
+                        key={statusOpt.value}
+                        onClick={() =>
+                          updateStatus(
+                            shoe.id,
+                            statusOpt.value,
+                            shoe.shoe_status,
+                          )
+                        }
+                        disabled={updatingId === shoe.id}
+                        className="neu-btn text-xs px-3 py-2 flex items-center gap-2"
+                      >
+                        {updatingId === shoe.id ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <statusOpt.icon className="w-3 h-3" />
+                        )}
+                        {statusOpt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
