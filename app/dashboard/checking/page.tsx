@@ -89,7 +89,7 @@ export default function CheckingPage() {
       );
       const isOverdue = diffDays > 3 && s.shoe_status !== "sudah_diambil";
 
-      if (activeTab === "overdue") return isOverdue;
+      if ((activeTab as string) === "overdue") return isOverdue;
       if (isOverdue && activeTab !== "overdue") return false;
 
       if (activeTab === "belum") return s.shoe_status === "menunggu_pengerjaan";
