@@ -15,14 +15,8 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
-// DEFINISI MENU BESERTA HAK AKSES ROLE
 const allMenus = [
-  {
-    href: "/dashboard",
-    label: "Dashboard",
-    icon: Home,
-    roles: ["admin"],
-  },
+  { href: "/dashboard", label: "Dashboard", icon: Home, roles: ["admin"] },
   {
     href: "/dashboard/orders/new",
     label: "Transaksi",
@@ -31,7 +25,7 @@ const allMenus = [
   },
   {
     href: "/dashboard/checking",
-    label: "Monitoring", // <-- Diubah dari "Pantauan" menjadi "Monitoring"
+    label: "Monitoring",
     icon: Monitor,
     roles: ["admin", "cashier", "technician"],
   },
@@ -61,7 +55,6 @@ export default function Sidebar({ profile }: { profile: any }) {
     router.refresh();
   };
 
-  // Filter menu berdasarkan role user yang login
   const userRole = profile?.role || "";
   const allowedMenus = allMenus.filter((menu) => menu.roles.includes(userRole));
 
@@ -81,7 +74,6 @@ export default function Sidebar({ profile }: { profile: any }) {
 
         <div className="flex-1 overflow-y-auto space-y-2 pb-4 pr-1">
           {allowedMenus.map((m: any, index: number) => {
-            // Fitur Dropdown
             if (m.isDropdown) {
               const isOpen = openDropdown === m.label;
               const isChildActive = m.children.some((c: any) =>
@@ -118,8 +110,6 @@ export default function Sidebar({ profile }: { profile: any }) {
                 </div>
               );
             }
-
-            // Menu Biasa
             return (
               <Link
                 key={m.href}
@@ -134,15 +124,15 @@ export default function Sidebar({ profile }: { profile: any }) {
 
         <button
           onClick={logout}
-          className="mt-auto flex items-center gap-3 px-4 py-3 rounded-xl bg-red-500/10 text-red-400 font-semibold border border-red-500/30 w-full"
+          className="mt-auto flex items-center gap-3 px-4 py-3 rounded-xl bg-red-500/10 text-red-400 font-semibold border border-red-500/30 w-full hover:bg-red-500/20 transition-colors"
         >
           <LogOut className="w-5 h-5" /> Keluar
         </button>
       </aside>
 
-      {/* BOTTOM NAV MOBILE */}
+      {/* BOTTOM NAV MOBILE (Rata Tengah, Tanpa Tombol Logout) */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-2 py-1">
-        <div className="flex justify-between items-center">
+        <div className="flex justify-around items-center w-full">
           {allowedMenus.slice(0, 5).map((m: any) => {
             const href = m.isDropdown ? m.children[0].href : m.href;
             const Icon = m.isDropdown ? m.children[0].icon : m.icon;
@@ -153,7 +143,7 @@ export default function Sidebar({ profile }: { profile: any }) {
               <Link
                 key={href}
                 href={href}
-                className={`flex flex-col items-center flex-1 py-2 px-1 gap-1 transition-colors ${isActive ? "text-accent" : "text-slate-500"}`}
+                className={`flex flex-col items-center justify-center flex-1 py-2 px-1 gap-1 transition-colors ${isActive ? "text-accent" : "text-slate-500"}`}
               >
                 <Icon className="w-5 h-5 md:w-6 md:h-6" />
                 <span className="text-[9px] md:text-[10px] font-medium text-center leading-tight">

@@ -32,6 +32,7 @@ const STATUS_LIST = [
 
 export default function CheckingPage() {
   const supabase = createClient();
+
   const [activeTab, setActiveTab] = useState<
     "belum" | "dikerjakan" | "selesai" | "siap_diambil" | "overdue"
   >("belum");
@@ -355,14 +356,15 @@ export default function CheckingPage() {
 
   return (
     <div className="max-w-full mx-auto space-y-4 pb-20">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+      {/* Header - Hanya Judul & Tombol Scan */}
+      <div className="space-y-3">
         <div>
           <h1 className="text-xl md:text-2xl font-bold">Pantauan Pengerjaan</h1>
           <p className="text-slate-400 text-xs md:text-sm">
             Pusat kendali operasional.
           </p>
         </div>
+
         <button
           onClick={startScanner}
           className="neu-btn-primary w-full md:w-auto flex items-center justify-center gap-2 py-3 md:py-2"
@@ -447,7 +449,6 @@ export default function CheckingPage() {
                 </tr>
               ) : (
                 filteredShoes.map((shoe) => {
-                  // Cari data teknisi dari tabel assignment
                   const activeAssignment =
                     shoe.assignment?.find(
                       (a: any) => a.assignment_status === "active",
@@ -475,7 +476,6 @@ export default function CheckingPage() {
                         </div>
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap">
-                        {/* TAMPILKAN NAMA TEKNISI JIKA ADA */}
                         {technicianName ? (
                           <span className="flex items-center gap-1.5 text-slate-200 font-medium">
                             <UserCircle2 className="w-4 h-4 text-accent" />
@@ -496,7 +496,6 @@ export default function CheckingPage() {
                       </td>
                       <td className="px-3 py-3 text-center">
                         <div className="flex items-center justify-center gap-2">
-                          {/* Detail */}
                           <Link
                             href={`/dashboard/orders/${shoe.order.id}`}
                             className="p-2 bg-slate-800 rounded-lg text-accent hover:bg-slate-700 transition-colors"
@@ -504,7 +503,6 @@ export default function CheckingPage() {
                             <Eye className="w-4 h-4" />
                           </Link>
 
-                          {/* Aksi Berdasarkan Tab */}
                           {activeTab === "dikerjakan" && (
                             <div className="flex gap-1">
                               {STATUS_LIST.filter(
@@ -540,7 +538,6 @@ export default function CheckingPage() {
 
                           {activeTab === "siap_diambil" && (
                             <div className="flex gap-1">
-                              {/* TOMBOL BAYAR (Hanya muncul jika belum lunas) */}
                               {shoe.order.payment_status !== "paid" && (
                                 <button
                                   onClick={() => setPayingOrder(shoe)}
@@ -549,8 +546,6 @@ export default function CheckingPage() {
                                   Bayar
                                 </button>
                               )}
-
-                              {/* TOMBOL SERAHKAN (Mati jika belum lunas) */}
                               <button
                                 onClick={() => handleHandover(shoe)}
                                 disabled={
