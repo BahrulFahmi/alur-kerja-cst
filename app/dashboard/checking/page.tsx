@@ -13,7 +13,6 @@ import {
   CreditCard,
   AlertTriangle,
   UserCircle2,
-  Calendar,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
@@ -91,7 +90,7 @@ export default function CheckingPage() {
       const isOverdue = diffDays > 3 && s.shoe_status !== "sudah_diambil";
 
       if ((activeTab as string) === "overdue") return isOverdue;
-      if (isOverdue && activeTab !== "overdue") return false;
+      if (isOverdue && (activeTab as string) !== "overdue") return false;
 
       if (activeTab === "belum") return s.shoe_status === "menunggu_pengerjaan";
       if (activeTab === "dikerjakan")
@@ -189,35 +188,47 @@ export default function CheckingPage() {
     }
   };
 
+  // --- FUNGSI AMBIL PEKERJAAN (DIPERBAIKI) ---
   const confirmTakeJob = async () => {
     setUpdatingId(scannedShoe.id);
     try {
-      const { data: tech } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("role", "technician")
-        .limit(1)
-        .single();
-      if (!tech) throw new Error("Tidak ada akun teknisi di database.");
+      // 1. Ambil user yang sedang login saat ini (Yoga/Rasyid/Rafly)
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Sesi login habis. Silakan login ulang.");
 
+      // 2. Ambil nama profil untuk verifikasi & notifikasi
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .single();
+
+      // 3. Update status sepatu
       await supabase
         .from("shoes")
         .update({ shoe_status: "sedang_dikerjakan" })
         .eq("id", scannedShoe.id);
+
+      // 4. Simpan penugasan menggunakan user.id (BUKAN mengambil acak dari DB)
       await supabase.from("shoe_assignments").insert({
         shoe_id: scannedShoe.id,
-        technician_id: tech.id,
+        technician_id: user.id,
         started_at: new Date().toISOString(),
         assignment_status: "active",
       });
+
       await supabase.from("shoe_status_history").insert({
         shoe_id: scannedShoe.id,
         previous_status: "menunggu_pengerjaan",
         new_status: "sedang_dikerjakan",
-        notes: "Diambil via scan",
+        notes: `Diambil via scan oleh ${profile?.full_name || "Teknisi"}`,
       });
 
-      toast.success("Berhasil mengambil pekerjaan!");
+      toast.success(
+        `Berhasil mengambil pekerjaan sebagai ${profile?.full_name || "Teknisi"}!`,
+      );
       closeScanner();
       setActiveTab("dikerjakan");
       fetchData();
@@ -449,11 +460,10 @@ export default function CheckingPage() {
                 </tr>
               ) : (
                 filteredShoes.map((shoe) => {
-                  const activeAssignment =
-                    shoe.assignment?.find(
-                      (a: any) => a.assignment_status === "active",
-                    ) || shoe.assignment?.[0];
-
+                  // PERBAIKAN: Hanya ambil assignment yang benar-benar active
+                  const activeAssignment = shoe.assignment?.find(
+                    (a: any) => a.assignment_status === "active",
+                  );
                   const technicianName =
                     activeAssignment?.technician?.full_name;
 
