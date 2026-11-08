@@ -16,7 +16,12 @@ import {
 import { useState } from "react";
 
 const allMenus = [
-  { href: "/dashboard", label: "Dashboard", icon: Home, roles: ["admin"] },
+  {
+    href: "/dashboard",
+    label: "Dashboard",
+    icon: Home,
+    roles: ["admin", "cashier"],
+  },
   {
     href: "/dashboard/orders/new",
     label: "Transaksi",
@@ -50,9 +55,14 @@ export default function Sidebar({ profile }: { profile: any }) {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
   const logout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
+    const isConfirmed = window.confirm(
+      "Apakah Anda yakin ingin keluar dari aplikasi?",
+    );
+    if (isConfirmed) {
+      await supabase.auth.signOut();
+      router.push("/login");
+      router.refresh();
+    }
   };
 
   const userRole = profile?.role || "";
@@ -74,6 +84,7 @@ export default function Sidebar({ profile }: { profile: any }) {
 
         <div className="flex-1 overflow-y-auto space-y-2 pb-4 pr-1">
           {allowedMenus.map((m: any, index: number) => {
+            // Logika Dropdown (jika ada)
             if (m.isDropdown) {
               const isOpen = openDropdown === m.label;
               const isChildActive = m.children.some((c: any) =>
@@ -110,11 +121,20 @@ export default function Sidebar({ profile }: { profile: any }) {
                 </div>
               );
             }
+
+            // PERBAIKAN LOGIKA MENU AKTIF
+            // Jika menu adalah Dashboard (/dashboard), harus persis sama.
+            // Jika menu lain, boleh diawali dengan path (startsWith).
+            const isActive =
+              m.href === "/dashboard"
+                ? pathname === "/dashboard"
+                : pathname.startsWith(m.href);
+
             return (
               <Link
                 key={m.href}
                 href={m.href}
-                className={`neu-nav ${pathname === m.href || pathname.startsWith(m.href + "/") ? "neu-nav-active" : ""}`}
+                className={`neu-nav ${isActive ? "neu-nav-active" : ""}`}
               >
                 <m.icon className="w-5 h-5" /> {m.label}
               </Link>
@@ -130,14 +150,19 @@ export default function Sidebar({ profile }: { profile: any }) {
         </button>
       </aside>
 
-      {/* BOTTOM NAV MOBILE (Rata Tengah, Tanpa Tombol Logout) */}
+      {/* BOTTOM NAV MOBILE */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-2 py-1">
         <div className="flex justify-around items-center w-full">
           {allowedMenus.slice(0, 5).map((m: any) => {
             const href = m.isDropdown ? m.children[0].href : m.href;
             const Icon = m.isDropdown ? m.children[0].icon : m.icon;
             const label = m.label;
-            const isActive = pathname.startsWith(href);
+
+            // PERBAIKAN LOGIKA UNTUK MOBILE
+            const isActive =
+              href === "/dashboard"
+                ? pathname === "/dashboard"
+                : pathname.startsWith(href);
 
             return (
               <Link

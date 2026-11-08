@@ -8,9 +8,16 @@ export default function Header({ profile }: { profile: any }) {
   const supabase = createClient();
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
+    // KONFIRMASI LOGOUT DI MOBILE
+    const isConfirmed = window.confirm(
+      "Apakah Anda yakin ingin keluar dari aplikasi?",
+    );
+
+    if (isConfirmed) {
+      await supabase.auth.signOut();
+      router.push("/login");
+      router.refresh();
+    }
   };
 
   return (

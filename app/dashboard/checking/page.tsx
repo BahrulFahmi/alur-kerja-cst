@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { Html5Qrcode } from "html5-qrcode";
 import {
   Loader2,
   Search,
@@ -19,12 +20,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
-import { Html5QrcodeScanner } from "html5-qrcode";
 import Link from "next/link";
 
 const PAYMENT_METHODS = ["Cash", "QR BCA", "QR BSI", "Bank BTN", "Bank BSI"];
 
-// Daftar semua status beserta ikon dan warnanya
 const STATUS_MAP: Record<string, { label: string; icon: any; color: string }> =
   {
     menunggu_pengerjaan: {
@@ -80,9 +79,10 @@ export default function CheckingPage() {
 
   // State Modal Scan
   const [showScanner, setShowScanner] = useState(false);
-  const [scanner, setScanner] = useState<Html5QrcodeScanner | null>(null);
   const [scannedShoe, setScannedShoe] = useState<any>(null);
   const [scanLoading, setScanLoading] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [html5QrCode, setHtml5QrCode] = useState<Html5Qrcode | null>(null);
 
   // State Modal Pembayaran
   const [payingOrder, setPayingOrder] = useState<any>(null);
@@ -139,7 +139,6 @@ export default function CheckingPage() {
     });
   };
 
-  // Filter Tab & Pencarian
   const filteredShoes = useMemo(() => {
     const now = new Date();
     return shoes.filter((s) => {
@@ -175,7 +174,6 @@ export default function CheckingPage() {
     });
   }, [shoes, activeTab, search]);
 
-  // Hitung jumlah tiap tab
   const getTabCount = (tab: string) => {
     const now = new Date();
     return shoes.filter((s) => {
@@ -202,32 +200,78 @@ export default function CheckingPage() {
     }).length;
   };
 
-  // --- FUNGSI SCAN ---
+  // --- FUNGSI SCAN BARU (OTOMATIS KAMERA BELAKANG) ---
   const startScanner = () => {
     setShowScanner(true);
     setScannedShoe(null);
-    setTimeout(() => {
-      const qrScanner = new Html5QrcodeScanner(
-        "reader",
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        false,
-      );
-      qrScanner.render(
-        async (decodedText) => {
-          qrScanner.clear();
-          await handleScan(decodedText);
-        },
-        (error) => {},
-      );
-      setScanner(qrScanner);
-    }, 100);
+    setCameraError(null);
   };
 
-  const closeScanner = () => {
-    if (scanner) scanner.clear().catch((e) => console.error(e));
+  const closeScanner = async () => {
+    if (html5QrCode) {
+      try {
+        await html5QrCode.stop();
+      } catch (e) {
+        console.error("Gagal stop scanner", e);
+      }
+      setHtml5QrCode(null);
+    }
     setShowScanner(false);
     setScannedShoe(null);
   };
+
+  // Effect untuk menjalankan kamera saat modal terbuka
+  useEffect(() => {
+    if (!showScanner || scannedShoe) return;
+
+    const qrCode = new Html5Qrcode("reader");
+    setHtml5QrCode(qrCode);
+
+    const startCamera = async () => {
+      try {
+        await qrCode.start(
+          { facingMode: "environment" }, // Memaksa kamera belakang
+          {
+            fps: 10,
+            qrbox: { width: 250, height: 250 },
+            aspectRatio: 1.0,
+          },
+          async (decodedText) => {
+            // Hentikan kamera saat QR terbaca
+            await qrCode.stop();
+            setHtml5QrCode(null);
+            await handleScan(decodedText);
+          },
+          (errorMessage) => {
+            // Abaikan error frame per frame
+          },
+        );
+      } catch (err: any) {
+        // Tampilkan error jika izin ditolak
+        if (
+          err.name === "NotAllowedError" ||
+          err.name === "PermissionDeniedError"
+        ) {
+          setCameraError(
+            "Izin kamera ditolak. Silakan izinkan akses kamera di browser Anda.",
+          );
+        } else {
+          setCameraError(
+            "Gagal membuka kamera. Pastikan perangkat memiliki kamera.",
+          );
+        }
+      }
+    };
+
+    startCamera();
+
+    // Cleanup saat modal ditutup
+    return () => {
+      if (qrCode.isScanning) {
+        qrCode.stop().catch((e) => console.error(e));
+      }
+    };
+  }, [showScanner, scannedShoe]);
 
   const handleScan = async (qrCode: string) => {
     setScanLoading(true);
@@ -291,7 +335,6 @@ export default function CheckingPage() {
     }
   };
 
-  // --- FUNGSI UPDATE STATUS ---
   const updateStatus = async (
     shoeId: string,
     newStatus: string,
@@ -334,7 +377,6 @@ export default function CheckingPage() {
     }
   };
 
-  // --- FUNGSI KASIR ---
   const confirmReady = async (shoeId: string) => {
     setUpdatingId(shoeId);
     try {
@@ -568,7 +610,6 @@ export default function CheckingPage() {
                         </div>
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap">
-                        {/* TAMPILAN TEKNISI & STATUS BARU */}
                         <div className="flex flex-col gap-1">
                           {technicianName ? (
                             <span className="flex items-center gap-1.5 text-slate-200 font-medium text-xs">
@@ -579,7 +620,6 @@ export default function CheckingPage() {
                             <span className="text-slate-600 text-xs">-</span>
                           )}
 
-                          {/* Badge Status */}
                           {shoe.shoe_status !== "menunggu_pengerjaan" &&
                             shoe.shoe_status !== "sudah_diambil" && (
                               <span
@@ -609,7 +649,6 @@ export default function CheckingPage() {
                             <Eye className="w-4 h-4" />
                           </Link>
 
-                          {/* LOGIKA TOMBOL TEKNISI ANTI-SALAH KLIK */}
                           {activeTab === "dikerjakan" && canUpdateStatus && (
                             <div className="flex gap-1">
                               {shoe.shoe_status === "sedang_dikerjakan" && (
@@ -675,7 +714,6 @@ export default function CheckingPage() {
                             </div>
                           )}
 
-                          {/* Teks Pengingat jika Teknisi lain buka tab Dikerjakan */}
                           {activeTab === "dikerjakan" &&
                             !canUpdateStatus &&
                             currentUser?.role === "technician" && (
@@ -684,7 +722,6 @@ export default function CheckingPage() {
                               </span>
                             )}
 
-                          {/* TOMBOL KASIR */}
                           {activeTab === "selesai" && isCashierOrAdmin && (
                             <button
                               onClick={() => confirmReady(shoe.id)}
@@ -728,7 +765,7 @@ export default function CheckingPage() {
         </div>
       </div>
 
-      {/* --- MODAL SCANNER (DIPERBARUI) --- */}
+      {/* --- MODAL SCANNER (OTOMATIS KAMERA BELAKANG, TANPA UI LIBRARY) --- */}
       {showScanner && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm p-4 space-y-4 shadow-2xl">
@@ -743,20 +780,42 @@ export default function CheckingPage() {
             </div>
 
             {!scannedShoe ? (
-              <>
+              <div className="relative">
+                {/* CSS Khusus untuk menyembunyikan UI bawaan html5-qrcode */}
+                <style>{`
+                  #reader { width: 100% !important; border: none !important; }
+                  #reader__dashboard { display: none !important; }
+                  #reader__scan_region { background: transparent !important; }
+                  #reader__dashboard_section_csr { display: none !important; }
+                  #reader img[alt="Info icon"] { display: none !important; }
+                `}</style>
+
                 <div
                   id="reader"
-                  className="w-full rounded-xl overflow-hidden bg-black text-white"
+                  className="w-full rounded-xl overflow-hidden bg-black"
                 ></div>
+
                 {scanLoading && (
-                  <p className="text-center text-sm text-accent animate-pulse">
-                    Memproses QR...
-                  </p>
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                    <Loader2 className="w-8 h-8 text-accent animate-spin" />
+                  </div>
                 )}
-              </>
+
+                {cameraError && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 p-4 text-center rounded-xl">
+                    <AlertTriangle className="w-10 h-10 text-red-400 mb-2" />
+                    <p className="text-sm text-red-400">{cameraError}</p>
+                    <button
+                      onClick={closeScanner}
+                      className="mt-4 px-4 py-2 bg-slate-800 text-slate-200 rounded-lg text-sm"
+                    >
+                      Tutup
+                    </button>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="space-y-4">
-                {/* TAMPILAN DETAIL KONFIRMASI SCAN BARU */}
                 <div className="bg-slate-800/50 p-3 rounded-lg space-y-2 border border-slate-700">
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-slate-400">Nota</span>

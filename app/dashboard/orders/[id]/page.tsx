@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createClient } from "@/lib/supabase/client";
 import { QRCodeSVG } from "qrcode.react";
@@ -11,6 +11,7 @@ import {
   CreditCard,
   Printer,
   Receipt,
+  Tag,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
@@ -63,7 +64,6 @@ export default function OrderDetail({
     let maxDays = 0;
 
     orderData.shoes.forEach((shoe: any) => {
-      // Ambil langsung dari database, bukan dari teks deskripsi
       const days = shoe.treatment?.duration_max_days || 1;
       if (days > maxDays) maxDays = days;
     });
@@ -116,7 +116,7 @@ export default function OrderDetail({
         ] as string,
     );
 
-  // Cetak dokumen HTML lewat iframe tersembunyi (tidak terpengaruh layout dashboard)
+  // Cetak dokumen HTML lewat iframe tersembunyi
   const printHtml = (html: string, fitSelector?: string) => {
     const iframe = document.createElement("iframe");
     iframe.style.cssText =
@@ -128,8 +128,6 @@ export default function OrderDetail({
     doc.write(html);
     doc.close();
     setTimeout(() => {
-      // Struk: ukur tinggi isi lalu jadikan tinggi kertas (Chrome tidak
-      // mendukung "size: 57mm auto", jadi tingginya harus angka pasti).
       if (fitSelector) {
         const el = doc.querySelector(fitSelector) as HTMLElement | null;
         if (el) {
@@ -224,8 +222,7 @@ export default function OrderDetail({
     printHtml(html, ".receipt");
   };
 
-  // Cetak stiker: ukuran kustom 7,675 cm x 5,925 cm, 1 sepatu = 1 halaman.
-  // Dicetak lewat iframe tersembunyi supaya tidak terpengaruh layout dashboard.
+  // Cetak stiker label
   const handlePrintLabels = () => {
     const estimasi = calculateMaxEstimatedDate(order);
     const labelsHtml = order.shoes
@@ -295,28 +292,42 @@ export default function OrderDetail({
 
   return (
     <div className="max-w-3xl mx-auto">
-      {/* UI LAYAR (otomatis disembunyikan saat print) */}
-      <div className="flex justify-between items-center mb-6 print:hidden">
-        <button
-          onClick={() => router.back()}
-          className="neu-btn flex items-center gap-2"
-        >
-          <ArrowLeft className="w-4 h-4" /> Kembali
-        </button>
-        <h1 className="text-xl font-bold">Nota {order.invoice_number}</h1>
-        <div className="flex items-center gap-2">
+      {/* HEADER UI - RAPI UNTUK MOBILE */}
+      <div className="flex flex-col gap-4 mb-6 print:hidden">
+        {/* Baris 1: Tombol Kembali & Cetak */}
+        <div className="flex justify-between items-center w-full gap-2">
           <button
-            onClick={handlePrintReceipt}
-            className="neu-btn flex items-center gap-2"
+            onClick={() => router.back()}
+            className="neu-btn flex items-center justify-center gap-2 flex-1 md:flex-none py-2"
           >
-            <Receipt className="w-4 h-4" /> Cetak Struk
+            <ArrowLeft className="w-4 h-4" /> Kembali
           </button>
-          <button
-            onClick={handlePrintLabels}
-            className="neu-btn-primary flex items-center gap-2"
-          >
-            <Printer className="w-4 h-4" /> Cetak Label
-          </button>
+
+          <div className="flex gap-2 flex-1 md:flex-none">
+            <button
+              onClick={handlePrintReceipt}
+              className="neu-btn flex items-center justify-center gap-2 flex-1 md:flex-none py-2"
+            >
+              <Receipt className="w-4 h-4" />
+              <span className="hidden md:inline">Cetak Struk</span>
+              <span className="md:hidden">Struk</span>
+            </button>
+            <button
+              onClick={handlePrintLabels}
+              className="neu-btn-primary flex items-center justify-center gap-2 flex-1 md:flex-none py-2"
+            >
+              <Tag className="w-4 h-4" />
+              <span className="hidden md:inline">Cetak Label</span>
+              <span className="md:hidden">Label</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Baris 2: Judul Nota */}
+        <div className="text-center w-full">
+          <h1 className="text-lg md:text-xl font-bold">
+            Nota {order.invoice_number}
+          </h1>
         </div>
       </div>
 

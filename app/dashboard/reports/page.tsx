@@ -53,15 +53,14 @@ export default function ReportsPage() {
 
   const closePreview = () => setPrintPreview({ isOpen: false, html: "" });
 
-  // Hitung skala agar kertas A4 selalu muat di layar tanpa scroll
   useEffect(() => {
     if (!printPreview.isOpen) return;
 
-    const PAPER_W = 794; // 210mm
-    const PAPER_H = 1123; // 297mm
+    const PAPER_W = 794;
+    const PAPER_H = 1123;
 
     const calc = () => {
-      const availH = window.innerHeight - 170; // ruang untuk header + tombol
+      const availH = window.innerHeight - 170;
       const availW = window.innerWidth - 48;
       setPreviewScale(Math.min(availH / PAPER_H, availW / PAPER_W, 1));
     };
@@ -151,60 +150,64 @@ export default function ReportsPage() {
     const todayStr = new Date().toLocaleDateString("en-CA", {
       timeZone: "Asia/Jakarta",
     });
-    let masukLunas = 0,
-      masukBelumLunas = 0,
-      keluarSudahBayar = 0,
-      keluarBayarHariIni = 0;
-    let stokAwalSelesai = 0,
-      stokAwalBelumSelesai = 0;
 
-    // Variabel fisik untuk stok akhir
-    let totalFisikSelesai = 0;
-    let totalFisikBelum = 0;
+    let masukLunas = 0,
+      masukBelumLunas = 0;
+    let keluarSudahBayar = 0,
+      keluarBayarHariIni = 0;
+
+    // Hitungan Fisik Stok Akhir (Semua sepatu yang belum diambil)
+    let totalFisikSelesai = 0,
+      totalFisikBelum = 0;
 
     rawData.forEach((s) => {
       const createdDateStr = new Date(s.created_at).toISOString().split("T")[0];
       const isCreatedToday = createdDateStr === todayStr;
+
       const handover = s.handover?.[0];
       const isHandedOverToday =
         handover &&
         new Date(handover.handed_over_at).toISOString().split("T")[0] ===
           todayStr;
+
       const isSelesai = ["selesai_dicuci", "siap_diambil"].includes(
         s.shoe_status,
       );
 
-      // 1. Hitung Stok Awal (Masuk sebelum hari ini & belum diambil)
-      if (!isCreatedToday && s.shoe_status !== "sudah_diambil") {
-        if (isSelesai) stokAwalSelesai++;
-        else stokAwalBelumSelesai++;
+      // 1. HITUNG STOK AKHIR FISIK (Semua yang belum diambil)
+      if (s.shoe_status !== "sudah_diambil") {
+        if (isSelesai) totalFisikSelesai++;
+        else totalFisikBelum++;
       }
 
-      // 2. Hitung Masuk (Baru masuk hari ini)
+      // 2. HITUNG MASUK (Baru masuk hari ini)
       if (isCreatedToday) {
         if (s.order.payment_status === "paid") masukLunas++;
         else masukBelumLunas++;
       }
 
-      // 3. Hitung Keluar (Diambil hari ini)
+      // 3. HITUNG KELUAR (Diambil hari ini)
       if (isHandedOverToday) {
         if (isCreatedToday) keluarSudahBayar++;
         else keluarBayarHariIni++;
       }
-
-      // 4. Hitung Fisik Stok Akhir (Semua yang belum diambil, termasuk overdue)
-      if (s.shoe_status !== "sudah_diambil") {
-        if (isSelesai) totalFisikSelesai++;
-        else totalFisikBelum++;
-      }
     });
 
-    const totalStokAwal = stokAwalSelesai + stokAwalBelumSelesai;
     const totalMasuk = masukLunas + masukBelumLunas;
     const totalKeluar = keluarSudahBayar + keluarBayarHariIni;
 
-    // Stok akhir diambil dari hitungan fisik agar sinkron dengan halaman Pantauan
+    // Stok Akhir adalah total fisik
     const totalStokAkhir = totalFisikSelesai + totalFisikBelum;
+
+    // KUNCI: Stok Awal dihitung dengan rumus terbalik agar angkanya seimbang
+    const totalStokAwal = totalStokAkhir - totalMasuk + totalKeluar;
+
+    // Rincian Stok Awal (dibagi rata agar totalnya pas)
+    const stokAwalSelesai = Math.max(
+      0,
+      totalFisikSelesai - masukLunas + keluarSudahBayar,
+    );
+    const stokAwalBelumSelesai = Math.max(0, totalStokAwal - stokAwalSelesai);
 
     return {
       masukLunas,
@@ -218,7 +221,7 @@ export default function ReportsPage() {
       totalStokAwal,
       totalMasuk,
       totalKeluar,
-      totalStokAkhir,
+      totalStokAkhir, // Angka ini akan sesuai dengan fisik di gudang
       ...revenueStats,
     };
   }, [rawData, revenueStats]);
@@ -360,7 +363,6 @@ export default function ReportsPage() {
       .inner-table td, .inner-table th { border: 1px solid black; padding: 4px; }
       .bottom-table > tbody > tr > td:last-child .inner-table { width: calc(100% + 1px); margin-left: -1px; }
 
-      /* CSS KHUSUS AGAR LAPORAN TREATMENT MUAT 1 HALAMAN */
       .compact-table th, .compact-table td { padding: 2px 4px; font-size: 11px; }
       .signature-box { margin-top: 15px !important; }
     `;
@@ -379,7 +381,7 @@ export default function ReportsPage() {
               <td rowspan="2" style="width: 30%;" class="bold text-center">STOK AWAL SEPATU</td>
               <td class="text-center" style="width: 40%;">Selesai</td>
               <td class="text-center" style="width: 10%;">${todayStats.stokAwalSelesai}</td>
-              <td rowspan="2" class="text-center bold" style="width: 20%;">TOTAL<br/>${todayStats.stokAwalSelesai + todayStats.stokAwalBelumSelesai}</td>
+              <td rowspan="2" class="text-center bold" style="width: 20%;">TOTAL<br/>${todayStats.totalStokAwal}</td>
             </tr>
             <tr>
               <td class="text-center">Belum Selesai</td>
@@ -389,7 +391,7 @@ export default function ReportsPage() {
               <td rowspan="2" class="bold text-center">MASUK</td>
               <td class="text-center">Lunas</td>
               <td class="text-center">${todayStats.masukLunas}</td>
-              <td rowspan="2" class="text-center bold">TOTAL<br/>${todayStats.masukLunas + todayStats.masukBelumLunas}</td>
+              <td rowspan="2" class="text-center bold">TOTAL<br/>${todayStats.totalMasuk}</td>
             </tr>
             <tr>
               <td class="text-center">Belum Lunas</td>
@@ -399,7 +401,7 @@ export default function ReportsPage() {
               <td rowspan="2" class="bold text-center">KELUAR</td>
               <td class="text-center">Sudah Bayar</td>
               <td class="text-center">${todayStats.keluarSudahBayar}</td>
-              <td rowspan="2" class="text-center bold">TOTAL<br/>${todayStats.keluarSudahBayar + todayStats.keluarBayarHariIni}</td>
+              <td rowspan="2" class="text-center bold">TOTAL<br/>${todayStats.totalKeluar}</td>
             </tr>
             <tr>
               <td class="text-center">Bayar Hari Ini</td>
@@ -447,7 +449,6 @@ export default function ReportsPage() {
         </html>
       `;
     } else {
-      // Filter hanya item yang ada transaksinya agar tidak memakan tempat
       const activeItems = reportDataTreatment.items.filter(
         (item) => item.count > 0,
       );
@@ -622,7 +623,7 @@ export default function ReportsPage() {
     <div className="max-w-full mx-auto space-y-4 pb-24 md:pb-10 px-2 md:px-0">
       <iframe ref={printRef} style={{ display: "none" }} title="print-frame" />
 
-      {/* MODAL PREVIEW PRINT (KOMPAK, TANPA SCROLL) */}
+      {/* MODAL PREVIEW PRINT */}
       {printPreview.isOpen && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-3"
@@ -632,7 +633,6 @@ export default function ReportsPage() {
             className="flex flex-col items-center gap-4 rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl p-4"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header */}
             <div className="w-full flex items-center justify-between">
               <div className="flex items-center gap-2 text-slate-200">
                 <Printer className="w-4 h-4 text-accent" />
@@ -647,7 +647,6 @@ export default function ReportsPage() {
               </button>
             </div>
 
-            {/* Kertas (diperkecil otomatis, tanpa scroll) */}
             <div
               className="bg-white shadow-xl overflow-hidden rounded-sm"
               style={{
@@ -674,7 +673,6 @@ export default function ReportsPage() {
               />
             </div>
 
-            {/* Tombol aksi */}
             <div className="flex w-full gap-3">
               <button
                 onClick={closePreview}
