@@ -10,37 +10,39 @@ import {
   Clock,
 } from "lucide-react";
 import { toast } from "sonner";
+import { formatDate } from "@/lib/format";
 
+// Daftar status proses pencucian
 const STATUS_LIST = [
   {
     value: "sedang_dikerjakan",
     label: "Sedang Dikerjakan",
     icon: Clock,
-    color: "text-status-working",
+    color: "text-blue-400",
   },
   {
     value: "proses_pencucian",
     label: "Proses Pencucian",
     icon: Droplets,
-    color: "text-status-washing",
+    color: "text-cyan-400",
   },
   {
     value: "proses_pengeringan",
     label: "Proses Pengeringan",
     icon: Wind,
-    color: "text-status-drying",
+    color: "text-amber-400",
   },
   {
     value: "proses_finishing",
     label: "Proses Finishing",
     icon: Sparkles,
-    color: "text-status-finishing",
+    color: "text-purple-400",
   },
   {
     value: "selesai_dicuci",
     label: "Selesai Dicuci",
     icon: CheckCircle2,
-    color: "text-status-done",
+    color: "text-green-400",
   },
 ];
 
@@ -56,12 +58,17 @@ export default function MyJobsPage() {
     } = await supabase.auth.getUser();
     if (!user) return;
 
+    // HANYA ambil penugasan milik teknisi yang login
     const { data, error } = await supabase
       .from("shoe_assignments")
       .select(
         `
-        id, assignment_status, assigned_at,
-        shoe:shoes!inner(*, order:orders(invoice_number, customer:customers(name)), treatment:treatments(name))
+        id, assignment_status,
+        shoe:shoes!inner(
+          id, shoe_code, brand, shoe_type, shoe_status, created_at,
+          order:orders(invoice_number, customer:customers(name)), 
+          treatment:treatments(name)
+        )
       `,
       )
       .eq("technician_id", user.id)
@@ -70,20 +77,15 @@ export default function MyJobsPage() {
       .order("assigned_at", { ascending: false });
 
     if (!error && data) {
-      // PERBAIKAN: Ambil data shoe (jika array, ambil index 0)
+      // Format data (antisipasi jika shoe berupa array)
       const formattedJobs = data
         .map((job: any) => {
           const shoeData = Array.isArray(job.shoe) ? job.shoe[0] : job.shoe;
           return { ...job, shoe: shoeData };
         })
-        .filter((job) => job.shoe); // Buang jika shoe kosong
+        .filter((job) => job.shoe);
 
-      // Hapus duplikasi data
-      const uniqueJobs = formattedJobs.filter(
-        (job, index, self) =>
-          index === self.findIndex((j) => j.shoe.id === job.shoe.id),
-      );
-      setJobs(uniqueJobs);
+      setJobs(formattedJobs);
     }
     setLoading(false);
   };
@@ -95,7 +97,7 @@ export default function MyJobsPage() {
   const updateStatus = async (
     shoeId: string,
     newStatus: string,
-    previousStatus: string,
+    prevStatus: string,
   ) => {
     setUpdatingId(shoeId);
     try {
@@ -109,7 +111,7 @@ export default function MyJobsPage() {
         .eq("id", shoeId);
       await supabase.from("shoe_status_history").insert({
         shoe_id: shoeId,
-        previous_status: previousStatus,
+        previous_status: prevStatus,
         new_status: newStatus,
         changed_by: user!.id,
         notes: `Update status oleh teknisi`,
@@ -125,7 +127,7 @@ export default function MyJobsPage() {
           .eq("shoe_id", shoeId)
           .eq("technician_id", user!.id);
 
-        toast.success("Pekerjaan selesai! Sepatu siap dicek kasir.");
+        toast.success("Pekerjaan selesai! Sepatu siap dicek Kasir.");
       } else {
         toast.success("Status berhasil diperbarui!");
       }
@@ -200,16 +202,15 @@ export default function MyJobsPage() {
                   <p className="text-sm font-semibold text-slate-300 mb-3">
                     Perbarui Status:
                   </p>
+
+                  {/* LOGIKA TOMBOL: Hanya munculkan tahapan selanjutnya */}
                   <div className="flex flex-wrap gap-2">
-                    {STATUS_LIST.filter(
-                      (s) => s.value !== shoe.shoe_status,
-                    ).map((statusOpt) => (
+                    {shoe.shoe_status === "sedang_dikerjakan" && (
                       <button
-                        key={statusOpt.value}
                         onClick={() =>
                           updateStatus(
                             shoe.id,
-                            statusOpt.value,
+                            "proses_pencucian",
                             shoe.shoe_status,
                           )
                         }
@@ -219,11 +220,74 @@ export default function MyJobsPage() {
                         {updatingId === shoe.id ? (
                           <Loader2 className="w-3 h-3 animate-spin" />
                         ) : (
-                          <statusOpt.icon className="w-3 h-3" />
+                          <Droplets className="w-3 h-3" />
                         )}
-                        {statusOpt.label}
+                        Mulai Cuci
                       </button>
-                    ))}
+                    )}
+
+                    {shoe.shoe_status === "proses_pencucian" && (
+                      <button
+                        onClick={() =>
+                          updateStatus(
+                            shoe.id,
+                            "proses_pengeringan",
+                            shoe.shoe_status,
+                          )
+                        }
+                        disabled={updatingId === shoe.id}
+                        className="neu-btn text-xs px-3 py-2 flex items-center gap-2"
+                      >
+                        {updatingId === shoe.id ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Wind className="w-3 h-3" />
+                        )}
+                        Selesai Cuci
+                      </button>
+                    )}
+
+                    {shoe.shoe_status === "proses_pengeringan" && (
+                      <button
+                        onClick={() =>
+                          updateStatus(
+                            shoe.id,
+                            "proses_finishing",
+                            shoe.shoe_status,
+                          )
+                        }
+                        disabled={updatingId === shoe.id}
+                        className="neu-btn text-xs px-3 py-2 flex items-center gap-2"
+                      >
+                        {updatingId === shoe.id ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Sparkles className="w-3 h-3" />
+                        )}
+                        Selesai Kering
+                      </button>
+                    )}
+
+                    {shoe.shoe_status === "proses_finishing" && (
+                      <button
+                        onClick={() =>
+                          updateStatus(
+                            shoe.id,
+                            "selesai_dicuci",
+                            shoe.shoe_status,
+                          )
+                        }
+                        disabled={updatingId === shoe.id}
+                        className="neu-btn-primary text-xs px-3 py-2 flex items-center gap-2"
+                      >
+                        {updatingId === shoe.id ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="w-3 h-3" />
+                        )}
+                        Selesai Finishing
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

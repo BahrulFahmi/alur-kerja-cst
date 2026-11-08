@@ -718,7 +718,7 @@ export default function CheckingPage() {
                             !canUpdateStatus &&
                             currentUser?.role === "technician" && (
                               <span className="text-[10px] text-slate-500 italic">
-                                Milik: {technicianName}
+                                Teknisi: {technicianName}
                               </span>
                             )}
 

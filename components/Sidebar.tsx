@@ -12,6 +12,7 @@ import {
   ChevronDown,
   ChevronRight,
   Monitor,
+  Wrench,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -33,6 +34,12 @@ const allMenus = [
     label: "Monitoring",
     icon: Monitor,
     roles: ["admin", "cashier", "technician"],
+  },
+  {
+    href: "/dashboard/my-jobs",
+    label: "Pekerjaan Saya",
+    icon: Wrench,
+    roles: ["technician"],
   },
   {
     href: "/dashboard/treatments",
@@ -122,9 +129,7 @@ export default function Sidebar({ profile }: { profile: any }) {
               );
             }
 
-            // PERBAIKAN LOGIKA MENU AKTIF
-            // Jika menu adalah Dashboard (/dashboard), harus persis sama.
-            // Jika menu lain, boleh diawali dengan path (startsWith).
+            // Logika Menu Aktif
             const isActive =
               m.href === "/dashboard"
                 ? pathname === "/dashboard"
@@ -158,7 +163,7 @@ export default function Sidebar({ profile }: { profile: any }) {
             const Icon = m.isDropdown ? m.children[0].icon : m.icon;
             const label = m.label;
 
-            // PERBAIKAN LOGIKA UNTUK MOBILE
+            // Logika Menu Aktif untuk Mobile
             const isActive =
               href === "/dashboard"
                 ? pathname === "/dashboard"

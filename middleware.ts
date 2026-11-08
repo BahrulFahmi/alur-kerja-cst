@@ -49,11 +49,13 @@ export async function middleware(request: NextRequest) {
     const role = profile?.role;
     const path = request.nextUrl.pathname;
 
-    // Aturan Teknisi (Hanya boleh akses Pantauan & Detail Order)
+    // Aturan Teknisi
+    // Teknisi boleh akses: Checking (Pantauan), Orders (Detail), dan My-Jobs (Pekerjaan Saya)
     if (role === "technician") {
       if (
         !path.startsWith("/dashboard/checking") &&
-        !path.startsWith("/dashboard/orders")
+        !path.startsWith("/dashboard/orders") &&
+        !path.startsWith("/dashboard/my-jobs") // <-- IZIN UNTUK PEKERJAAN SAYA
       ) {
         return NextResponse.redirect(
           new URL("/dashboard/checking", request.url),
@@ -61,7 +63,8 @@ export async function middleware(request: NextRequest) {
       }
     }
 
-    // Aturan Kasir (Tidak boleh akses Treatment & Settings)
+    // Aturan Kasir
+    // Kasir tidak boleh akses Treatment & Settings
     if (role === "cashier") {
       if (
         path.startsWith("/dashboard/treatments") ||

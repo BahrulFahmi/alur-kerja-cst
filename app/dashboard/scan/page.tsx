@@ -10,8 +10,10 @@ import {
   AlertTriangle,
   Camera,
   RefreshCw,
+  Calendar,
 } from "lucide-react";
 import { toast } from "sonner";
+import { formatDate } from "@/lib/format";
 
 export default function ScanPage() {
   const supabase = createClient();
@@ -88,7 +90,6 @@ export default function ScanPage() {
           setScanError("Kamera tidak ditemukan di perangkat ini.");
         }
       } catch (err: any) {
-        // Ini akan menangkap jika user menolak izin
         if (
           err.name === "NotAllowedError" ||
           err.name === "PermissionDeniedError"
@@ -126,7 +127,7 @@ export default function ScanPage() {
           `
           *, 
           order:orders(invoice_number, customer:customers(name, whatsapp)), 
-          treatment:treatments(name),
+          treatment:treatments(name, duration_max_days),
           assignment:shoe_assignments(technician:profiles(full_name))
         `,
         )
@@ -156,6 +157,14 @@ export default function ScanPage() {
       setLoading(false);
       setTimeout(() => window.location.reload(), 2500);
     }
+  };
+
+  // Fungsi Hitung Estimasi Selesai
+  const calculateEstimatedDate = (shoe: any) => {
+    if (!shoe.treatment?.duration_max_days) return "-";
+    const estDate = new Date(shoe.created_at);
+    estDate.setDate(estDate.getDate() + shoe.treatment.duration_max_days);
+    return formatDate(estDate.toISOString());
   };
 
   const confirmAction = async () => {
@@ -310,6 +319,13 @@ export default function ScanPage() {
             <span className="text-slate-400">Treatment</span>
             <span className="font-bold text-accent text-right">
               {shoeData.treatment?.name}
+            </span>
+
+            {/* TAMBAHAN ESTIMASI SELESAI */}
+            <span className="text-slate-400">Estimasi Selesai</span>
+            <span className="font-bold text-amber-400 text-right flex items-center justify-end gap-1">
+              <Calendar className="w-3.5 h-3.5" />
+              {calculateEstimatedDate(shoeData)}
             </span>
           </div>
 
