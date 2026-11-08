@@ -13,6 +13,9 @@ import {
   CreditCard,
   AlertTriangle,
   UserCircle2,
+  Calendar,
+  Wind,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
@@ -21,17 +24,53 @@ import Link from "next/link";
 
 const PAYMENT_METHODS = ["Cash", "QR BCA", "QR BSI", "Bank BTN", "Bank BSI"];
 
-const STATUS_LIST = [
-  { value: "sedang_dikerjakan", label: "Dikerjakan", icon: Clock },
-  { value: "proses_pencucian", label: "Pencucian", icon: Droplets },
-  { value: "proses_pengeringan", label: "Pengeringan", icon: Clock },
-  { value: "proses_finishing", label: "Finishing", icon: CheckCircle2 },
-  { value: "selesai_dicuci", label: "Selesai Cuci", icon: CheckCircle2 },
-];
+// Daftar semua status beserta ikon dan warnanya
+const STATUS_MAP: Record<string, { label: string; icon: any; color: string }> =
+  {
+    menunggu_pengerjaan: {
+      label: "Menunggu",
+      icon: Clock,
+      color: "text-slate-400",
+    },
+    sedang_dikerjakan: {
+      label: "Dikerjakan",
+      icon: Clock,
+      color: "text-blue-400",
+    },
+    proses_pencucian: {
+      label: "Pencucian",
+      icon: Droplets,
+      color: "text-cyan-400",
+    },
+    proses_pengeringan: {
+      label: "Pengeringan",
+      icon: Wind,
+      color: "text-amber-400",
+    },
+    proses_finishing: {
+      label: "Finishing",
+      icon: Sparkles,
+      color: "text-purple-400",
+    },
+    selesai_dicuci: {
+      label: "Selesai Cuci",
+      icon: CheckCircle2,
+      color: "text-green-400",
+    },
+    siap_diambil: {
+      label: "Siap Diambil",
+      icon: CheckCircle2,
+      color: "text-emerald-400",
+    },
+  };
 
 export default function CheckingPage() {
   const supabase = createClient();
 
+  const [currentUser, setCurrentUser] = useState<{
+    id: string;
+    role: string;
+  } | null>(null);
   const [activeTab, setActiveTab] = useState<
     "belum" | "dikerjakan" | "selesai" | "siap_diambil" | "overdue"
   >("belum");
@@ -50,6 +89,24 @@ export default function CheckingPage() {
   const [selectedMethod, setSelectedMethod] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
+  // Ambil data user & role
+  useEffect(() => {
+    const getUser = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .single();
+        if (profile) setCurrentUser({ id: user.id, role: profile.role });
+      }
+    };
+    getUser();
+  }, [supabase]);
+
   const fetchData = async () => {
     const { data } = await supabase
       .from("shoes")
@@ -57,8 +114,8 @@ export default function CheckingPage() {
         `
         id, shoe_code, brand, shoe_type, shoe_status, created_at, qr_code,
         order:orders(id, invoice_number, order_date, total_price, payment_status, payment_method, customer:customers(name, whatsapp)), 
-        treatment:treatments(name), 
-        assignment:shoe_assignments(technician:profiles(full_name), assignment_status)
+        treatment:treatments(name, duration_max_days), 
+        assignment:shoe_assignments(technician:profiles(id, full_name), assignment_status)
       `,
       )
       .order("created_at", { ascending: false });
@@ -70,6 +127,17 @@ export default function CheckingPage() {
   useEffect(() => {
     fetchData();
   }, [supabase]);
+
+  const calculateEstimatedDate = (shoe: any) => {
+    if (!shoe.treatment?.duration_max_days) return "-";
+    const estDate = new Date(shoe.created_at);
+    estDate.setDate(estDate.getDate() + shoe.treatment.duration_max_days);
+    return estDate.toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
 
   // Filter Tab & Pencarian
   const filteredShoes = useMemo(() => {
@@ -175,7 +243,7 @@ export default function CheckingPage() {
       if (error || !shoe) throw new Error("QR Code tidak valid.");
       if (shoe.shoe_status !== "menunggu_pengerjaan") {
         throw new Error(
-          `Sepatu sudah dikerjakan (Status: ${shoe.shoe_status}).`,
+          `Sepatu sudah dikerjakan (Status: ${STATUS_MAP[shoe.shoe_status]?.label || shoe.shoe_status}).`,
         );
       }
 
@@ -188,33 +256,19 @@ export default function CheckingPage() {
     }
   };
 
-  // --- FUNGSI AMBIL PEKERJAAN (DIPERBAIKI) ---
   const confirmTakeJob = async () => {
     setUpdatingId(scannedShoe.id);
     try {
-      // 1. Ambil user yang sedang login saat ini (Yoga/Rasyid/Rafly)
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Sesi login habis. Silakan login ulang.");
+      if (!currentUser) throw new Error("Sesi login habis.");
 
-      // 2. Ambil nama profil untuk verifikasi & notifikasi
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("full_name")
-        .eq("id", user.id)
-        .single();
-
-      // 3. Update status sepatu
       await supabase
         .from("shoes")
         .update({ shoe_status: "sedang_dikerjakan" })
         .eq("id", scannedShoe.id);
 
-      // 4. Simpan penugasan menggunakan user.id (BUKAN mengambil acak dari DB)
       await supabase.from("shoe_assignments").insert({
         shoe_id: scannedShoe.id,
-        technician_id: user.id,
+        technician_id: currentUser.id,
         started_at: new Date().toISOString(),
         assignment_status: "active",
       });
@@ -223,12 +277,10 @@ export default function CheckingPage() {
         shoe_id: scannedShoe.id,
         previous_status: "menunggu_pengerjaan",
         new_status: "sedang_dikerjakan",
-        notes: `Diambil via scan oleh ${profile?.full_name || "Teknisi"}`,
+        notes: "Diambil via scan",
       });
 
-      toast.success(
-        `Berhasil mengambil pekerjaan sebagai ${profile?.full_name || "Teknisi"}!`,
-      );
+      toast.success("Berhasil mengambil pekerjaan!");
       closeScanner();
       setActiveTab("dikerjakan");
       fetchData();
@@ -255,7 +307,7 @@ export default function CheckingPage() {
         shoe_id: shoeId,
         previous_status: prevStatus,
         new_status: newStatus,
-        notes: "Update status",
+        notes: `Update status ke ${STATUS_MAP[newStatus]?.label || newStatus}`,
       });
 
       if (newStatus === "selesai_dicuci") {
@@ -270,7 +322,9 @@ export default function CheckingPage() {
         toast.success("Pekerjaan selesai! Siap dicek Kasir.");
         setActiveTab("selesai");
       } else {
-        toast.success("Status diperbarui!");
+        toast.success(
+          `Status diperbarui ke ${STATUS_MAP[newStatus]?.label || newStatus}!`,
+        );
       }
       fetchData();
     } catch (err: any) {
@@ -310,7 +364,11 @@ export default function CheckingPage() {
     try {
       await supabase
         .from("orders")
-        .update({ payment_status: "paid", payment_method: selectedMethod })
+        .update({
+          payment_status: "paid",
+          payment_method: selectedMethod,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", payingOrder.order.id);
       toast.success("Pembayaran Lunas!");
       setPayingOrder(null);
@@ -367,7 +425,7 @@ export default function CheckingPage() {
 
   return (
     <div className="max-w-full mx-auto space-y-4 pb-20">
-      {/* Header - Hanya Judul & Tombol Scan */}
+      {/* Header */}
       <div className="space-y-3">
         <div>
           <h1 className="text-xl md:text-2xl font-bold">Pantauan Pengerjaan</h1>
@@ -384,7 +442,7 @@ export default function CheckingPage() {
         </button>
       </div>
 
-      {/* Tabs (Scrollable di Mobile) */}
+      {/* Tabs */}
       <div className="flex overflow-x-auto pb-2 gap-2 scrollbar-hide">
         {[
           { id: "belum", label: "Belum" },
@@ -425,7 +483,7 @@ export default function CheckingPage() {
       {/* Tabel */}
       <div className="neu-card !p-0 overflow-hidden">
         <div className="overflow-x-auto w-full">
-          <table className="w-full text-left border-collapse text-xs md:text-sm min-w-[850px]">
+          <table className="w-full text-left border-collapse text-xs md:text-sm min-w-[1000px]">
             <thead className="bg-slate-800/80 text-slate-300">
               <tr>
                 <th className="px-3 py-3 font-semibold border-b border-slate-700">
@@ -435,13 +493,16 @@ export default function CheckingPage() {
                   Tgl Masuk
                 </th>
                 <th className="px-3 py-3 font-semibold border-b border-slate-700">
+                  Estimasi
+                </th>
+                <th className="px-3 py-3 font-semibold border-b border-slate-700">
                   Pelanggan
                 </th>
                 <th className="px-3 py-3 font-semibold border-b border-slate-700">
                   Item
                 </th>
                 <th className="px-3 py-3 font-semibold border-b border-slate-700">
-                  Teknisi
+                  Teknisi & Status
                 </th>
                 <th className="px-3 py-3 font-semibold border-b border-slate-700 text-center">
                   Status Bayar
@@ -454,18 +515,33 @@ export default function CheckingPage() {
             <tbody className="divide-y divide-slate-800/50">
               {filteredShoes.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-500">
+                  <td colSpan={8} className="p-8 text-center text-slate-500">
                     Tidak ada data di kategori ini.
                   </td>
                 </tr>
               ) : (
                 filteredShoes.map((shoe) => {
-                  // PERBAIKAN: Hanya ambil assignment yang benar-benar active
-                  const activeAssignment = shoe.assignment?.find(
-                    (a: any) => a.assignment_status === "active",
-                  );
+                  const activeAssignment =
+                    shoe.assignment?.find(
+                      (a: any) =>
+                        a.assignment_status === "active" ||
+                        a.assignment_status === "completed",
+                    ) || shoe.assignment?.[0];
+
                   const technicianName =
                     activeAssignment?.technician?.full_name;
+                  const technicianId = activeAssignment?.technician?.id;
+
+                  const isMyJob = technicianId === currentUser?.id;
+                  const canUpdateStatus =
+                    currentUser?.role === "technician" && isMyJob;
+                  const isCashierOrAdmin =
+                    currentUser?.role === "cashier" ||
+                    currentUser?.role === "admin";
+
+                  const statusInfo =
+                    STATUS_MAP[shoe.shoe_status] ||
+                    STATUS_MAP["menunggu_pengerjaan"];
 
                   return (
                     <tr
@@ -478,6 +554,12 @@ export default function CheckingPage() {
                       <td className="px-3 py-3 text-slate-400 whitespace-nowrap text-[11px]">
                         {formatDate(shoe.created_at)}
                       </td>
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <span className="flex items-center gap-1 text-slate-300 font-medium">
+                          <Calendar className="w-3.5 h-3.5 text-accent" />
+                          {calculateEstimatedDate(shoe)}
+                        </span>
+                      </td>
                       <td className="px-3 py-3">{shoe.order.customer.name}</td>
                       <td className="px-3 py-3 whitespace-nowrap">
                         {shoe.brand} - {shoe.shoe_type}
@@ -486,14 +568,28 @@ export default function CheckingPage() {
                         </div>
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap">
-                        {technicianName ? (
-                          <span className="flex items-center gap-1.5 text-slate-200 font-medium">
-                            <UserCircle2 className="w-4 h-4 text-accent" />
-                            {technicianName}
-                          </span>
-                        ) : (
-                          <span className="text-slate-600">-</span>
-                        )}
+                        {/* TAMPILAN TEKNISI & STATUS BARU */}
+                        <div className="flex flex-col gap-1">
+                          {technicianName ? (
+                            <span className="flex items-center gap-1.5 text-slate-200 font-medium text-xs">
+                              <UserCircle2 className="w-3.5 h-3.5 text-accent" />
+                              {technicianName}
+                            </span>
+                          ) : (
+                            <span className="text-slate-600 text-xs">-</span>
+                          )}
+
+                          {/* Badge Status */}
+                          {shoe.shoe_status !== "menunggu_pengerjaan" &&
+                            shoe.shoe_status !== "sudah_diambil" && (
+                              <span
+                                className={`flex items-center gap-1 text-[10px] font-semibold ${statusInfo.color}`}
+                              >
+                                <statusInfo.icon className="w-3 h-3" />
+                                {statusInfo.label}
+                              </span>
+                            )}
+                        </div>
                       </td>
                       <td className="px-3 py-3 text-center">
                         <span
@@ -513,40 +609,93 @@ export default function CheckingPage() {
                             <Eye className="w-4 h-4" />
                           </Link>
 
-                          {activeTab === "dikerjakan" && (
+                          {/* LOGIKA TOMBOL TEKNISI ANTI-SALAH KLIK */}
+                          {activeTab === "dikerjakan" && canUpdateStatus && (
                             <div className="flex gap-1">
-                              {STATUS_LIST.filter(
-                                (s) => s.value !== shoe.shoe_status,
-                              ).map((st) => (
+                              {shoe.shoe_status === "sedang_dikerjakan" && (
                                 <button
-                                  key={st.value}
                                   onClick={() =>
                                     updateStatus(
                                       shoe.id,
-                                      st.value,
+                                      "proses_pencucian",
                                       shoe.shoe_status,
                                     )
                                   }
                                   disabled={updatingId === shoe.id}
                                   className="neu-btn !py-1 !px-2 text-[10px]"
                                 >
-                                  {st.label}
+                                  Mulai Cuci
                                 </button>
-                              ))}
+                              )}
+                              {shoe.shoe_status === "proses_pencucian" && (
+                                <button
+                                  onClick={() =>
+                                    updateStatus(
+                                      shoe.id,
+                                      "proses_pengeringan",
+                                      shoe.shoe_status,
+                                    )
+                                  }
+                                  disabled={updatingId === shoe.id}
+                                  className="neu-btn !py-1 !px-2 text-[10px]"
+                                >
+                                  Selesai Cuci
+                                </button>
+                              )}
+                              {shoe.shoe_status === "proses_pengeringan" && (
+                                <button
+                                  onClick={() =>
+                                    updateStatus(
+                                      shoe.id,
+                                      "proses_finishing",
+                                      shoe.shoe_status,
+                                    )
+                                  }
+                                  disabled={updatingId === shoe.id}
+                                  className="neu-btn !py-1 !px-2 text-[10px]"
+                                >
+                                  Selesai Kering
+                                </button>
+                              )}
+                              {shoe.shoe_status === "proses_finishing" && (
+                                <button
+                                  onClick={() =>
+                                    updateStatus(
+                                      shoe.id,
+                                      "selesai_dicuci",
+                                      shoe.shoe_status,
+                                    )
+                                  }
+                                  disabled={updatingId === shoe.id}
+                                  className="neu-btn-primary !py-1 !px-2 text-[10px]"
+                                >
+                                  Selesai Finishing
+                                </button>
+                              )}
                             </div>
                           )}
 
-                          {activeTab === "selesai" && (
+                          {/* Teks Pengingat jika Teknisi lain buka tab Dikerjakan */}
+                          {activeTab === "dikerjakan" &&
+                            !canUpdateStatus &&
+                            currentUser?.role === "technician" && (
+                              <span className="text-[10px] text-slate-500 italic">
+                                Milik: {technicianName}
+                              </span>
+                            )}
+
+                          {/* TOMBOL KASIR */}
+                          {activeTab === "selesai" && isCashierOrAdmin && (
                             <button
                               onClick={() => confirmReady(shoe.id)}
                               disabled={updatingId === shoe.id}
                               className="neu-btn-primary !py-1 !px-3 text-xs"
                             >
-                              Siap
+                              Siap Ambil
                             </button>
                           )}
 
-                          {activeTab === "siap_diambil" && (
+                          {activeTab === "siap_diambil" && isCashierOrAdmin && (
                             <div className="flex gap-1">
                               {shoe.order.payment_status !== "paid" && (
                                 <button
@@ -579,7 +728,7 @@ export default function CheckingPage() {
         </div>
       </div>
 
-      {/* --- MODAL SCANNER --- */}
+      {/* --- MODAL SCANNER (DIPERBARUI) --- */}
       {showScanner && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm p-4 space-y-4 shadow-2xl">
@@ -607,15 +756,34 @@ export default function CheckingPage() {
               </>
             ) : (
               <div className="space-y-4">
-                <p className="text-sm text-slate-300">
-                  Nota:{" "}
-                  <strong className="text-accent">
-                    {scannedShoe.order.invoice_number}
-                  </strong>
-                </p>
-                <p className="text-sm text-slate-300">
-                  Item: {scannedShoe.brand} - {scannedShoe.shoe_type}
-                </p>
+                {/* TAMPILAN DETAIL KONFIRMASI SCAN BARU */}
+                <div className="bg-slate-800/50 p-3 rounded-lg space-y-2 border border-slate-700">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-slate-400">Nota</span>
+                    <span className="text-sm font-bold text-accent">
+                      {scannedShoe.order.invoice_number}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-slate-400">Pelanggan</span>
+                    <span className="text-sm font-semibold text-slate-200">
+                      {scannedShoe.order.customer.name}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-slate-400">Item</span>
+                    <span className="text-sm font-semibold text-slate-200">
+                      {scannedShoe.brand} - {scannedShoe.shoe_type}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-slate-400">Treatment</span>
+                    <span className="text-sm font-bold text-accent">
+                      {scannedShoe.treatment?.name || "-"}
+                    </span>
+                  </div>
+                </div>
+
                 <button
                   onClick={confirmTakeJob}
                   disabled={updatingId === scannedShoe.id}

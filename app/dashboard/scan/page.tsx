@@ -2,12 +2,14 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Html5QrcodeScanner } from "html5-qrcode";
+import { Html5Qrcode } from "html5-qrcode";
 import {
   Loader2,
   CheckCircle2,
   PackageCheck,
   AlertTriangle,
+  Camera,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -18,7 +20,9 @@ export default function ScanPage() {
   const [shoeData, setShoeData] = useState<any>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [scanner, setScanner] = useState<Html5QrcodeScanner | null>(null);
+  const [scanner, setScanner] = useState<Html5Qrcode | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [isCameraReady, setIsCameraReady] = useState(false);
 
   useEffect(() => {
     const checkRole = async () => {
@@ -35,34 +39,86 @@ export default function ScanPage() {
       }
     };
     checkRole();
+  }, [supabase]);
 
-    if (!shoeData) {
-      const qrScanner = new Html5QrcodeScanner(
-        "reader",
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        false,
-      );
+  useEffect(() => {
+    if (shoeData || loading) return;
 
-      qrScanner.render(
-        async (decodedText) => {
-          qrScanner.clear();
-          await handleScan(decodedText);
-        },
-        (error) => {},
-      );
+    const startScanner = async () => {
+      try {
+        const html5QrCode = new Html5Qrcode("reader");
+        setScanner(html5QrCode);
 
-      setScanner(qrScanner);
-    }
+        // Meminta izin kamera & mencari kamera belakang
+        const devices = await Html5Qrcode.getCameras();
+
+        if (devices && devices.length) {
+          let cameraId = devices[0].id;
+
+          // Prioritaskan kamera belakang
+          const backCamera = devices.find(
+            (device) =>
+              device.label.toLowerCase().includes("back") ||
+              device.label.toLowerCase().includes("belakang") ||
+              device.label.toLowerCase().includes("rear"),
+          );
+          if (backCamera) {
+            cameraId = backCamera.id;
+          }
+
+          await html5QrCode.start(
+            cameraId,
+            {
+              fps: 10,
+              qrbox: { width: 250, height: 250 },
+              aspectRatio: 1.0,
+            },
+            async (decodedText) => {
+              await html5QrCode.stop();
+              await handleScan(decodedText);
+            },
+            () => {
+              // Abaikan error frame per frame
+            },
+          );
+
+          setIsCameraReady(true);
+          setScanError(null);
+        } else {
+          setScanError("Kamera tidak ditemukan di perangkat ini.");
+        }
+      } catch (err: any) {
+        // Ini akan menangkap jika user menolak izin
+        if (
+          err.name === "NotAllowedError" ||
+          err.name === "PermissionDeniedError"
+        ) {
+          setScanError(
+            "Izin kamera ditolak. Silakan izinkan akses kamera di pengaturan browser Anda.",
+          );
+        } else if (err.name === "NotFoundError") {
+          setScanError("Kamera tidak ditemukan.");
+        } else {
+          setScanError(
+            "Gagal mengakses kamera. Pastikan perangkat memiliki kamera.",
+          );
+        }
+        console.error(err);
+      }
+    };
+
+    startScanner();
 
     return () => {
       if (scanner) {
-        scanner.clear().catch((e) => console.error(e));
+        scanner.stop().catch((e) => console.error("Stop scanner error", e));
       }
     };
-  }, [shoeData, supabase]);
+  }, [shoeData, loading]);
 
   const handleScan = async (qrCode: string) => {
     setLoading(true);
+    setScanError(null);
     try {
       const { data: shoe, error } = await supabase
         .from("shoes")
@@ -80,7 +136,6 @@ export default function ScanPage() {
       if (error || !shoe)
         throw new Error("QR Code tidak valid atau sepatu tidak ditemukan.");
 
-      // VALIDASI BERDASARKAN ROLE
       if (userRole === "technician") {
         if (shoe.shoe_status !== "menunggu_pengerjaan") {
           throw new Error(
@@ -98,9 +153,8 @@ export default function ScanPage() {
       setShoeData(shoe);
     } catch (err: any) {
       toast.error(err.message);
-      setTimeout(() => window.location.reload(), 2500);
-    } finally {
       setLoading(false);
+      setTimeout(() => window.location.reload(), 2500);
     }
   };
 
@@ -112,7 +166,6 @@ export default function ScanPage() {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Sesi berakhir.");
 
-      // Aksi untuk Teknisi
       if (userRole === "technician") {
         await supabase
           .from("shoes")
@@ -145,7 +198,6 @@ export default function ScanPage() {
         router.push("/dashboard/my-jobs");
       }
 
-      // Aksi untuk Kasir (Konfirmasi Siap Diambil)
       if (userRole === "cashier") {
         await supabase
           .from("shoes")
@@ -187,11 +239,37 @@ export default function ScanPage() {
       </p>
 
       {!shoeData && !loading && (
-        <div className="neu-card">
+        <div className="neu-card overflow-hidden relative">
           <div
             id="reader"
-            className="w-full rounded-xl overflow-hidden bg-black text-white"
+            className="w-full"
+            style={{ minHeight: "300px" }}
           ></div>
+
+          {!isCameraReady && !scanError && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/80 backdrop-blur-sm">
+              <Loader2 className="w-8 h-8 animate-spin text-accent mb-2" />
+              <p className="text-sm text-slate-400">Menyiapkan Kamera...</p>
+              <p className="text-[10px] text-slate-500 mt-2 text-center max-w-[200px]">
+                (Jika muncul pop-up izin, klik "Izinkan")
+              </p>
+            </div>
+          )}
+
+          {scanError && (
+            <div className="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center p-6 text-center z-10">
+              <Camera className="w-12 h-12 text-red-400 mb-3" />
+              <p className="text-red-400 font-semibold text-sm mb-4">
+                {scanError}
+              </p>
+              <button
+                onClick={() => window.location.reload()}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-800 rounded-lg text-sm text-slate-200 hover:bg-slate-700 transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" /> Coba Lagi
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -219,7 +297,6 @@ export default function ScanPage() {
               {shoeData.order.customer.name}
             </span>
 
-            {/* TAMBAHAN: Nomor WhatsApp Pelanggan */}
             <span className="text-slate-400">WhatsApp</span>
             <span className="font-semibold text-right text-accent">
               {shoeData.order.customer.whatsapp}

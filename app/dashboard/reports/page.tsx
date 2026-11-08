@@ -15,6 +15,7 @@ import {
   Eye,
   Tags,
   X,
+  Calendar,
 } from "lucide-react";
 import Link from "next/link";
 import * as XLSX from "xlsx";
@@ -32,6 +33,10 @@ export default function ReportsPage() {
   const [search, setSearch] = useState("");
   const [dateStart, setDateStart] = useState("");
   const [dateEnd, setDateEnd] = useState("");
+
+  // State Filter Baru
+  const [filterPayment, setFilterPayment] = useState("all");
+  const [filterPickup, setFilterPickup] = useState("all");
 
   const [activeTab, setActiveTab] = useState<"laporan" | "pelanggan">(
     "laporan",
@@ -146,65 +151,60 @@ export default function ReportsPage() {
     const todayStr = new Date().toLocaleDateString("en-CA", {
       timeZone: "Asia/Jakarta",
     });
-
     let masukLunas = 0,
-      masukBelumLunas = 0;
-    let keluarSudahBayar = 0,
+      masukBelumLunas = 0,
+      keluarSudahBayar = 0,
       keluarBayarHariIni = 0;
+    let stokAwalSelesai = 0,
+      stokAwalBelumSelesai = 0;
 
-    // Variabel untuk menghitung stok fisik total
-    let totalFisikSelesai = 0,
-      totalFisikBelumSelesai = 0;
+    // Variabel fisik untuk stok akhir
+    let totalFisikSelesai = 0;
+    let totalFisikBelum = 0;
 
     rawData.forEach((s) => {
       const createdDateStr = new Date(s.created_at).toISOString().split("T")[0];
       const isCreatedToday = createdDateStr === todayStr;
-
       const handover = s.handover?.[0];
       const isHandedOverToday =
         handover &&
         new Date(handover.handed_over_at).toISOString().split("T")[0] ===
           todayStr;
-
       const isSelesai = ["selesai_dicuci", "siap_diambil"].includes(
         s.shoe_status,
       );
 
-      // 1. HITUNG STOK FISIK TOTAL (Sama persis dengan halaman Pantauan)
-      // Semua sepatu yang statusnya bukan 'sudah_diambil' dihitung.
-      if (s.shoe_status !== "sudah_diambil") {
-        if (isSelesai) totalFisikSelesai++;
-        else totalFisikBelumSelesai++;
+      // 1. Hitung Stok Awal (Masuk sebelum hari ini & belum diambil)
+      if (!isCreatedToday && s.shoe_status !== "sudah_diambil") {
+        if (isSelesai) stokAwalSelesai++;
+        else stokAwalBelumSelesai++;
       }
 
-      // 2. HITUNG MASUK (Hanya hari ini)
+      // 2. Hitung Masuk (Baru masuk hari ini)
       if (isCreatedToday) {
         if (s.order.payment_status === "paid") masukLunas++;
         else masukBelumLunas++;
       }
 
-      // 3. HITUNG KELUAR (Hanya hari ini)
+      // 3. Hitung Keluar (Diambil hari ini)
       if (isHandedOverToday) {
         if (isCreatedToday) keluarSudahBayar++;
         else keluarBayarHariIni++;
       }
+
+      // 4. Hitung Fisik Stok Akhir (Semua yang belum diambil, termasuk overdue)
+      if (s.shoe_status !== "sudah_diambil") {
+        if (isSelesai) totalFisikSelesai++;
+        else totalFisikBelum++;
+      }
     });
 
+    const totalStokAwal = stokAwalSelesai + stokAwalBelumSelesai;
     const totalMasuk = masukLunas + masukBelumLunas;
     const totalKeluar = keluarSudahBayar + keluarBayarHariIni;
 
-    // KUNCI UTAMA:
-    // Total Fisik adalah Stok Akhir saat ini.
-    // Stok Awal = Stok Akhir - Masuk + Keluar (Rumus dibalik)
-    const totalStokAkhir = totalFisikSelesai + totalFisikBelumSelesai;
-    const totalStokAwal = totalStokAkhir - totalMasuk + totalKeluar;
-
-    // Rincian Stok Awal (Hanya untuk tampilan, hasilnya pasti pas dengan totalStokAwal)
-    const stokAwalSelesai = Math.max(
-      0,
-      totalFisikSelesai - masukLunas + keluarSudahBayar,
-    );
-    const stokAwalBelumSelesai = Math.max(0, totalStokAwal - stokAwalSelesai);
+    // Stok akhir diambil dari hitungan fisik agar sinkron dengan halaman Pantauan
+    const totalStokAkhir = totalFisikSelesai + totalFisikBelum;
 
     return {
       masukLunas,
@@ -214,11 +214,11 @@ export default function ReportsPage() {
       stokAwalSelesai,
       stokAwalBelumSelesai,
       stokAkhirSelesai: totalFisikSelesai,
-      stokAkhirBelumDikerjakan: totalFisikBelumSelesai,
+      stokAkhirBelumDikerjakan: totalFisikBelum,
       totalStokAwal,
       totalMasuk,
       totalKeluar,
-      totalStokAkhir, // Ini akan 100% sama dengan total Pantauan
+      totalStokAkhir,
       ...revenueStats,
     };
   }, [rawData, revenueStats]);
@@ -259,9 +259,21 @@ export default function ReportsPage() {
       const shoeDateStr = new Date(shoe.created_at).toISOString().split("T")[0];
       if (dateStart && shoeDateStr < dateStart) return false;
       if (dateEnd && shoeDateStr > dateEnd) return false;
+
+      // Filter Pembayaran
+      if (filterPayment === "paid" && shoe.order.payment_status !== "paid")
+        return false;
+      if (filterPayment === "unpaid" && shoe.order.payment_status === "paid")
+        return false;
+
+      // Filter Pengambilan
+      const isTaken = shoe.shoe_status === "sudah_diambil";
+      if (filterPickup === "taken" && !isTaken) return false;
+      if (filterPickup === "not_taken" && isTaken) return false;
+
       return true;
     });
-  }, [rawData, search, dateStart, dateEnd]);
+  }, [rawData, search, dateStart, dateEnd, filterPayment, filterPickup]);
 
   const filteredCustomers = useMemo(() => {
     return customers.filter(
@@ -275,23 +287,12 @@ export default function ReportsPage() {
     const todayStr = new Date().toLocaleDateString("en-CA", {
       timeZone: "Asia/Jakarta",
     });
-
-    // Ambil sepatu yang memenuhi kriteria pembayaran di HARI INI
-    // (Sama persis dengan logika Masuk Lunas & Keluar Bayar Hari Ini)
     const validShoes = rawData.filter((s) => {
       if (s.order.payment_status !== "paid") return false;
-
-      const createdDateStr = new Date(s.created_at).toISOString().split("T")[0];
-      const isCreatedToday = createdDateStr === todayStr;
-
-      const handover = s.handover?.[0];
-      const isHandedOverToday =
-        handover &&
-        new Date(handover.handed_over_at).toISOString().split("T")[0] ===
-          todayStr;
-
-      // Ambil jika: Masuk & Lunas hari ini, ATAU Keluar & Lunas hari ini
-      return isCreatedToday || isHandedOverToday;
+      const paymentDate = new Date(s.order.updated_at || s.order.created_at)
+        .toISOString()
+        .split("T")[0];
+      return paymentDate === todayStr;
     });
 
     const normalize = (str: string) =>
@@ -326,7 +327,7 @@ export default function ReportsPage() {
     return {
       items,
       totalCount: totalKeseluruhanCount,
-      totalRevenue: revenueStats.pendapatanHariIni, // Ambil dari total pendapatan harian
+      totalRevenue: revenueStats.pendapatanHariIni,
       cashInHand,
     };
   }, [rawData, treatments, revenueStats]);
@@ -378,7 +379,7 @@ export default function ReportsPage() {
               <td rowspan="2" style="width: 30%;" class="bold text-center">STOK AWAL SEPATU</td>
               <td class="text-center" style="width: 40%;">Selesai</td>
               <td class="text-center" style="width: 10%;">${todayStats.stokAwalSelesai}</td>
-              <td rowspan="2" class="text-center bold" style="width: 20%;">TOTAL<br/>${todayStats.totalStokAwal}</td>
+              <td rowspan="2" class="text-center bold" style="width: 20%;">TOTAL<br/>${todayStats.stokAwalSelesai + todayStats.stokAwalBelumSelesai}</td>
             </tr>
             <tr>
               <td class="text-center">Belum Selesai</td>
@@ -388,7 +389,7 @@ export default function ReportsPage() {
               <td rowspan="2" class="bold text-center">MASUK</td>
               <td class="text-center">Lunas</td>
               <td class="text-center">${todayStats.masukLunas}</td>
-              <td rowspan="2" class="text-center bold">TOTAL<br/>${todayStats.totalMasuk}</td>
+              <td rowspan="2" class="text-center bold">TOTAL<br/>${todayStats.masukLunas + todayStats.masukBelumLunas}</td>
             </tr>
             <tr>
               <td class="text-center">Belum Lunas</td>
@@ -398,7 +399,7 @@ export default function ReportsPage() {
               <td rowspan="2" class="bold text-center">KELUAR</td>
               <td class="text-center">Sudah Bayar</td>
               <td class="text-center">${todayStats.keluarSudahBayar}</td>
-              <td rowspan="2" class="text-center bold">TOTAL<br/>${todayStats.totalKeluar}</td>
+              <td rowspan="2" class="text-center bold">TOTAL<br/>${todayStats.keluarSudahBayar + todayStats.keluarBayarHariIni}</td>
             </tr>
             <tr>
               <td class="text-center">Bayar Hari Ini</td>
@@ -793,32 +794,63 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* FILTER */}
-      <div className="flex flex-col md:flex-row gap-2 mt-2">
-        <div className="relative flex-1">
-          <input
-            type="text"
-            placeholder="Cari data..."
-            className="neu-input pl-9 py-3 md:py-2 text-sm"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+      {/* FILTER (DIPERBARUI AGAR RAPI) */}
+      <div className="flex flex-col xl:flex-row gap-3 mt-2 w-full">
+        {/* Baris 1 di HP / Kiri di Laptop: Search & Tanggal */}
+        <div className="flex flex-col md:flex-row flex-1 gap-3">
+          {/* Search */}
+          <div className="relative w-full md:w-1/2">
+            <input
+              type="text"
+              placeholder="Cari nota, pelanggan..."
+              className="neu-input pl-9 py-3 md:py-2 text-sm w-full"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+          </div>
+
+          {/* Filter Tanggal */}
+          <div className="flex items-center gap-2 w-full md:w-1/2">
+            <input
+              type="date"
+              className="neu-input cursor-pointer py-3 md:py-2 w-full text-sm"
+              value={dateStart}
+              onChange={(e) => setDateStart(e.target.value)}
+            />
+            <span className="text-slate-500 text-sm">-</span>
+            <input
+              type="date"
+              className="neu-input cursor-pointer py-3 md:py-2 w-full text-sm"
+              value={dateEnd}
+              onChange={(e) => setDateEnd(e.target.value)}
+            />
+          </div>
         </div>
-        <div className="flex flex-col md:flex-row items-center gap-2">
-          <input
-            type="date"
-            className="neu-input cursor-pointer py-3 md:py-2 w-full text-sm"
-            value={dateStart}
-            onChange={(e) => setDateStart(e.target.value)}
-          />
-          <span className="text-slate-500 text-sm hidden md:block">-</span>
-          <input
-            type="date"
-            className="neu-input cursor-pointer py-3 md:py-2 w-full text-sm"
-            value={dateEnd}
-            onChange={(e) => setDateEnd(e.target.value)}
-          />
+
+        {/* Baris 2 di HP / Kanan di Laptop: Filter Select */}
+        <div className="flex flex-col md:flex-row gap-3 w-full xl:w-auto">
+          {/* Filter Pembayaran */}
+          <select
+            className="neu-input py-3 md:py-2 text-sm w-full md:w-[200px]"
+            value={filterPayment}
+            onChange={(e) => setFilterPayment(e.target.value)}
+          >
+            <option value="all">Semua Pembayaran</option>
+            <option value="paid">Lunas</option>
+            <option value="unpaid">Belum Lunas</option>
+          </select>
+
+          {/* Filter Pengambilan */}
+          <select
+            className="neu-input py-3 md:py-2 text-sm w-full md:w-[200px]"
+            value={filterPickup}
+            onChange={(e) => setFilterPickup(e.target.value)}
+          >
+            <option value="all">Semua Pengambilan</option>
+            <option value="taken">Sudah Diambil</option>
+            <option value="not_taken">Belum Diambil</option>
+          </select>
         </div>
       </div>
 
@@ -826,7 +858,7 @@ export default function ReportsPage() {
       {activeTab === "laporan" && (
         <div className="neu-card !p-0 overflow-hidden">
           <div className="overflow-x-auto w-full">
-            <table className="w-full text-left border-collapse text-[11px] md:text-xs min-w-[800px]">
+            <table className="w-full text-left border-collapse text-[11px] md:text-xs min-w-[1000px]">
               <thead className="bg-slate-800/80 text-slate-300">
                 <tr>
                   <th className="px-3 py-2 font-semibold border-b border-slate-700">
@@ -854,6 +886,9 @@ export default function ReportsPage() {
                     Pembayaran
                   </th>
                   <th className="px-3 py-2 font-semibold border-b border-slate-700 text-center">
+                    Tgl Diambil
+                  </th>
+                  <th className="px-3 py-2 font-semibold border-b border-slate-700 text-center">
                     Aksi
                   </th>
                 </tr>
@@ -861,7 +896,7 @@ export default function ReportsPage() {
               <tbody className="divide-y divide-slate-800/50">
                 {filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="p-8 text-center text-slate-500">
+                    <td colSpan={10} className="p-8 text-center text-slate-500">
                       Tidak ada data ditemukan.
                     </td>
                   </tr>
@@ -902,6 +937,17 @@ export default function ReportsPage() {
                             ? "Lunas"
                             : "Belum Lunas"}
                         </span>
+                      </td>
+                      {/* KOLOM TANGGAL DIAMBIL BARU */}
+                      <td className="px-3 py-2 text-center text-slate-400">
+                        {s.handover?.[0]?.handed_over_at ? (
+                          <span className="flex items-center justify-center gap-1">
+                            <Calendar className="w-3 h-3 text-green-400" />
+                            {formatDate(s.handover[0].handed_over_at)}
+                          </span>
+                        ) : (
+                          "-"
+                        )}
                       </td>
                       <td className="px-3 py-2 text-center">
                         <Link
