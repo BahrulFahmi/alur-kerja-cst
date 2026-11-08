@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Html5Qrcode } from "html5-qrcode";
 import {
   Loader2,
   Search,
@@ -20,6 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
+import { Html5QrcodeScanner } from "html5-qrcode";
 import Link from "next/link";
 
 const PAYMENT_METHODS = ["Cash", "QR BCA", "QR BSI", "Bank BTN", "Bank BSI"];
@@ -79,10 +79,9 @@ export default function CheckingPage() {
 
   // State Modal Scan
   const [showScanner, setShowScanner] = useState(false);
+  const [scanner, setScanner] = useState<Html5QrcodeScanner | null>(null);
   const [scannedShoe, setScannedShoe] = useState<any>(null);
   const [scanLoading, setScanLoading] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const [html5QrCode, setHtml5QrCode] = useState<Html5Qrcode | null>(null);
 
   // State Modal Pembayaran
   const [payingOrder, setPayingOrder] = useState<any>(null);
@@ -200,78 +199,32 @@ export default function CheckingPage() {
     }).length;
   };
 
-  // --- FUNGSI SCAN BARU (OTOMATIS KAMERA BELAKANG) ---
+  // --- FUNGSI SCAN ---
   const startScanner = () => {
     setShowScanner(true);
     setScannedShoe(null);
-    setCameraError(null);
+    setTimeout(() => {
+      const qrScanner = new Html5QrcodeScanner(
+        "reader",
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        false,
+      );
+      qrScanner.render(
+        async (decodedText) => {
+          qrScanner.clear();
+          await handleScan(decodedText);
+        },
+        (error) => {},
+      );
+      setScanner(qrScanner);
+    }, 100);
   };
 
-  const closeScanner = async () => {
-    if (html5QrCode) {
-      try {
-        await html5QrCode.stop();
-      } catch (e) {
-        console.error("Gagal stop scanner", e);
-      }
-      setHtml5QrCode(null);
-    }
+  const closeScanner = () => {
+    if (scanner) scanner.clear().catch((e) => console.error(e));
     setShowScanner(false);
     setScannedShoe(null);
   };
-
-  // Effect untuk menjalankan kamera saat modal terbuka
-  useEffect(() => {
-    if (!showScanner || scannedShoe) return;
-
-    const qrCode = new Html5Qrcode("reader");
-    setHtml5QrCode(qrCode);
-
-    const startCamera = async () => {
-      try {
-        await qrCode.start(
-          { facingMode: "environment" }, // Memaksa kamera belakang
-          {
-            fps: 10,
-            qrbox: { width: 250, height: 250 },
-            aspectRatio: 1.0,
-          },
-          async (decodedText) => {
-            // Hentikan kamera saat QR terbaca
-            await qrCode.stop();
-            setHtml5QrCode(null);
-            await handleScan(decodedText);
-          },
-          (errorMessage) => {
-            // Abaikan error frame per frame
-          },
-        );
-      } catch (err: any) {
-        // Tampilkan error jika izin ditolak
-        if (
-          err.name === "NotAllowedError" ||
-          err.name === "PermissionDeniedError"
-        ) {
-          setCameraError(
-            "Izin kamera ditolak. Silakan izinkan akses kamera di browser Anda.",
-          );
-        } else {
-          setCameraError(
-            "Gagal membuka kamera. Pastikan perangkat memiliki kamera.",
-          );
-        }
-      }
-    };
-
-    startCamera();
-
-    // Cleanup saat modal ditutup
-    return () => {
-      if (qrCode.isScanning) {
-        qrCode.stop().catch((e) => console.error(e));
-      }
-    };
-  }, [showScanner, scannedShoe]);
 
   const handleScan = async (qrCode: string) => {
     setScanLoading(true);
@@ -279,7 +232,7 @@ export default function CheckingPage() {
       const { data: shoe, error } = await supabase
         .from("shoes")
         .select(
-          "*, order:orders(invoice_number, customer:customers(name)), treatment:treatments(name)",
+          "*, order:orders(invoice_number, customer:customers(name)), treatment:treatments(name, duration_max_days)",
         )
         .or(`qr_code.eq.${qrCode},shoe_code.eq.${qrCode}`)
         .single();
@@ -327,48 +280,6 @@ export default function CheckingPage() {
       toast.success("Berhasil mengambil pekerjaan!");
       closeScanner();
       setActiveTab("dikerjakan");
-      fetchData();
-    } catch (err: any) {
-      toast.error(err.message);
-    } finally {
-      setUpdatingId(null);
-    }
-  };
-
-  const updateStatus = async (
-    shoeId: string,
-    newStatus: string,
-    prevStatus: string,
-  ) => {
-    setUpdatingId(shoeId);
-    try {
-      await supabase
-        .from("shoes")
-        .update({ shoe_status: newStatus })
-        .eq("id", shoeId);
-      await supabase.from("shoe_status_history").insert({
-        shoe_id: shoeId,
-        previous_status: prevStatus,
-        new_status: newStatus,
-        notes: `Update status ke ${STATUS_MAP[newStatus]?.label || newStatus}`,
-      });
-
-      if (newStatus === "selesai_dicuci") {
-        await supabase
-          .from("shoe_assignments")
-          .update({
-            assignment_status: "completed",
-            completed_at: new Date().toISOString(),
-          })
-          .eq("shoe_id", shoeId)
-          .eq("assignment_status", "active");
-        toast.success("Pekerjaan selesai! Siap dicek Kasir.");
-        setActiveTab("selesai");
-      } else {
-        toast.success(
-          `Status diperbarui ke ${STATUS_MAP[newStatus]?.label || newStatus}!`,
-        );
-      }
       fetchData();
     } catch (err: any) {
       toast.error(err.message);
@@ -572,11 +483,6 @@ export default function CheckingPage() {
 
                   const technicianName =
                     activeAssignment?.technician?.full_name;
-                  const technicianId = activeAssignment?.technician?.id;
-
-                  const isMyJob = technicianId === currentUser?.id;
-                  const canUpdateStatus =
-                    currentUser?.role === "technician" && isMyJob;
                   const isCashierOrAdmin =
                     currentUser?.role === "cashier" ||
                     currentUser?.role === "admin";
@@ -649,79 +555,7 @@ export default function CheckingPage() {
                             <Eye className="w-4 h-4" />
                           </Link>
 
-                          {activeTab === "dikerjakan" && canUpdateStatus && (
-                            <div className="flex gap-1">
-                              {shoe.shoe_status === "sedang_dikerjakan" && (
-                                <button
-                                  onClick={() =>
-                                    updateStatus(
-                                      shoe.id,
-                                      "proses_pencucian",
-                                      shoe.shoe_status,
-                                    )
-                                  }
-                                  disabled={updatingId === shoe.id}
-                                  className="neu-btn !py-1 !px-2 text-[10px]"
-                                >
-                                  Mulai Cuci
-                                </button>
-                              )}
-                              {shoe.shoe_status === "proses_pencucian" && (
-                                <button
-                                  onClick={() =>
-                                    updateStatus(
-                                      shoe.id,
-                                      "proses_pengeringan",
-                                      shoe.shoe_status,
-                                    )
-                                  }
-                                  disabled={updatingId === shoe.id}
-                                  className="neu-btn !py-1 !px-2 text-[10px]"
-                                >
-                                  Selesai Cuci
-                                </button>
-                              )}
-                              {shoe.shoe_status === "proses_pengeringan" && (
-                                <button
-                                  onClick={() =>
-                                    updateStatus(
-                                      shoe.id,
-                                      "proses_finishing",
-                                      shoe.shoe_status,
-                                    )
-                                  }
-                                  disabled={updatingId === shoe.id}
-                                  className="neu-btn !py-1 !px-2 text-[10px]"
-                                >
-                                  Selesai Kering
-                                </button>
-                              )}
-                              {shoe.shoe_status === "proses_finishing" && (
-                                <button
-                                  onClick={() =>
-                                    updateStatus(
-                                      shoe.id,
-                                      "selesai_dicuci",
-                                      shoe.shoe_status,
-                                    )
-                                  }
-                                  disabled={updatingId === shoe.id}
-                                  className="neu-btn-primary !py-1 !px-2 text-[10px]"
-                                >
-                                  Selesai Finishing
-                                </button>
-                              )}
-                            </div>
-                          )}
-
-                          {activeTab === "dikerjakan" &&
-                            !canUpdateStatus &&
-                            currentUser?.role === "technician" && (
-                              <span className="text-[10px] text-slate-500 italic">
-                                Teknisi: {technicianName}
-                              </span>
-                            )}
-
+                          {/* TOMBOL KASIR (Selesai & Siap Diambil) */}
                           {activeTab === "selesai" && isCashierOrAdmin && (
                             <button
                               onClick={() => confirmReady(shoe.id)}
@@ -765,7 +599,7 @@ export default function CheckingPage() {
         </div>
       </div>
 
-      {/* --- MODAL SCANNER (OTOMATIS KAMERA BELAKANG, TANPA UI LIBRARY) --- */}
+      {/* --- MODAL SCANNER --- */}
       {showScanner && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm p-4 space-y-4 shadow-2xl">
@@ -780,40 +614,17 @@ export default function CheckingPage() {
             </div>
 
             {!scannedShoe ? (
-              <div className="relative">
-                {/* CSS Khusus untuk menyembunyikan UI bawaan html5-qrcode */}
-                <style>{`
-                  #reader { width: 100% !important; border: none !important; }
-                  #reader__dashboard { display: none !important; }
-                  #reader__scan_region { background: transparent !important; }
-                  #reader__dashboard_section_csr { display: none !important; }
-                  #reader img[alt="Info icon"] { display: none !important; }
-                `}</style>
-
+              <>
                 <div
                   id="reader"
-                  className="w-full rounded-xl overflow-hidden bg-black"
+                  className="w-full rounded-xl overflow-hidden bg-black text-white"
                 ></div>
-
                 {scanLoading && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                    <Loader2 className="w-8 h-8 text-accent animate-spin" />
-                  </div>
+                  <p className="text-center text-sm text-accent animate-pulse">
+                    Memproses QR...
+                  </p>
                 )}
-
-                {cameraError && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 p-4 text-center rounded-xl">
-                    <AlertTriangle className="w-10 h-10 text-red-400 mb-2" />
-                    <p className="text-sm text-red-400">{cameraError}</p>
-                    <button
-                      onClick={closeScanner}
-                      className="mt-4 px-4 py-2 bg-slate-800 text-slate-200 rounded-lg text-sm"
-                    >
-                      Tutup
-                    </button>
-                  </div>
-                )}
-              </div>
+              </>
             ) : (
               <div className="space-y-4">
                 <div className="bg-slate-800/50 p-3 rounded-lg space-y-2 border border-slate-700">
@@ -839,6 +650,16 @@ export default function CheckingPage() {
                     <span className="text-xs text-slate-400">Treatment</span>
                     <span className="text-sm font-bold text-accent">
                       {scannedShoe.treatment?.name || "-"}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center border-t border-slate-700/50 pt-2 mt-2">
+                    <span className="text-xs text-slate-400">
+                      Estimasi Selesai
+                    </span>
+                    <span className="text-sm font-bold text-amber-400 flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5" />
+                      {calculateEstimatedDate(scannedShoe)}
                     </span>
                   </div>
                 </div>

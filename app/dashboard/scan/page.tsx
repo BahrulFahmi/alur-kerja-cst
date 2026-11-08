@@ -51,7 +51,6 @@ export default function ScanPage() {
         const html5QrCode = new Html5Qrcode("reader");
         setScanner(html5QrCode);
 
-        // Meminta izin kamera & mencari kamera belakang
         const devices = await Html5Qrcode.getCameras();
 
         if (devices && devices.length) {
