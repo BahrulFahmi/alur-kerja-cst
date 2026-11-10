@@ -222,6 +222,7 @@ export default function OrderDetail({
 
       await printer.connect();
 
+      // LOOPING SEMUA SEPATU (Jika 2 sepatu, akan print 2 label)
       for (const shoe of order.shoes) {
         const itemType = shoe.shoe_type?.split(" - ")[0] || "Sepatu";
         const itemModel = shoe.shoe_type?.split(" - ")[1] || "";
@@ -239,6 +240,7 @@ export default function OrderDetail({
         printer
           .initialize()
           .line("CHAT SHOE TREATMENT", { align: Align.Center, bold: true })
+          .line(order.invoice_number, { align: Align.Center }) // <-- TAMBAH NOMOR NOTA
           .line("--------------------------------")
 
           // CETAK QR CODE
@@ -249,6 +251,7 @@ export default function OrderDetail({
           })
 
           .line("--------------------------------")
+          // RAPATKAN INFORMASI
           .line(title, { bold: true })
           .line(`Treatment: ${shoe.treatment?.name || "-"}`)
           .line(`Pelanggan: ${order.customer?.name}`)
@@ -511,6 +514,12 @@ export default function OrderDetail({
                         <div className="text-center font-bold text-sm mb-1">
                           CHAT SHOE TREATMENT
                         </div>
+
+                        {/* TAMBAHKAN NOMOR NOTA DI SINI */}
+                        <div className="text-center mb-1">
+                          {order.invoice_number}
+                        </div>
+
                         <div className="flex justify-center my-2">
                           <QRCodeSVG value={shoe.qr_code} size={80} />
                         </div>
