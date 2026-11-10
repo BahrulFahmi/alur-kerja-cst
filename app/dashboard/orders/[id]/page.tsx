@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import { createClient } from "@/lib/supabase/client";
 import { QRCodeSVG } from "qrcode.react";
 import { useRouter } from "next/navigation";
@@ -9,12 +8,18 @@ import {
   Trash2,
   AlertTriangle,
   CreditCard,
-  Printer,
   Receipt,
   Tag,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
+// IMPORT LIBRARY WEB THERMAL PRINTER
+import {
+  WebThermalPrinter,
+  ConnectionMode,
+  PaperSize,
+  Align,
+} from "@quan-erp/web-thermal-printer";
 
 export default function OrderDetail({
   params,
@@ -26,6 +31,7 @@ export default function OrderDetail({
   const [order, setOrder] = useState<any>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const printRef = useRef<HTMLIFrameElement>(null);
 
   const fetchData = async () => {
     const { id } = await params;
@@ -107,50 +113,39 @@ export default function OrderDetail({
   const canEdit = userRole === "cashier";
   const isPaid = order.payment_status === "paid";
 
-  const esc = (t: any) =>
-    String(t ?? "").replace(
-      /[&<>"]/g,
-      (c) =>
-        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[
-          c
-        ] as string,
-    );
-
-  // Cetak dokumen HTML lewat iframe tersembunyi
-  const printHtml = (html: string, fitSelector?: string) => {
-    const iframe = document.createElement("iframe");
-    iframe.style.cssText =
-      "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;";
-    document.body.appendChild(iframe);
-    const doc = iframe.contentDocument || iframe.contentWindow?.document;
-    if (!doc || !iframe.contentWindow) return;
-    doc.open();
-    doc.write(html);
-    doc.close();
-    setTimeout(() => {
-      if (fitSelector) {
-        const el = doc.querySelector(fitSelector) as HTMLElement | null;
-        if (el) {
-          const mm =
-            Math.ceil((el.getBoundingClientRect().height * 25.4) / 96) + 2;
-          const st = doc.createElement("style");
-          st.textContent = `@page { size: 57mm ${mm}mm; margin: 0; }`;
-          doc.head.appendChild(st);
-        }
-      }
-      iframe.contentWindow?.focus();
-      iframe.contentWindow?.print();
-      setTimeout(() => iframe.remove(), 2000);
-    }, 300);
-  };
-
   const rupiah = (n: number) => `Rp${Number(n || 0).toLocaleString("id-ID")}`;
 
-  // Cetak struk/nota thermal: lebar kertas 57-58 mm, tinggi mengikuti isi.
-  const handlePrintReceipt = () => {
-    const estimasi = calculateMaxEstimatedDate(order);
-    const itemsHtml = order.shoes
-      .map((shoe: any) => {
+  // --- CETAK STRUK VIA BLUETOOTH ---
+  const handlePrintReceipt = async () => {
+    if (typeof navigator === "undefined" || !(navigator as any).bluetooth) {
+      toast.error(
+        "Browser Anda tidak mendukung Bluetooth. Gunakan Chrome Android.",
+      );
+      return;
+    }
+
+    try {
+      const printer = new WebThermalPrinter({
+        mode: ConnectionMode.Bluetooth,
+        paperSize: PaperSize["58mm"],
+      });
+
+      await printer.connect();
+
+      // Bangun Struk (parameter align & bold di dalam line)
+      printer
+        .initialize()
+        .line("CHAT SHOE TREATMENT", { align: Align.Center, bold: true })
+        .line(order.invoice_number, { align: Align.Center })
+        .line(isPaid ? "LUNAS" : "BELUM LUNAS", { align: Align.Center })
+        .line("--------------------------------")
+        .line(`Pelanggan : ${order.customer?.name}`)
+        .line(`Tanggal   : ${formatDate(order.created_at)}`)
+        .line(`Estimasi  : ${calculateMaxEstimatedDate(order)}`)
+        .line("--------------------------------");
+
+      // Item-item
+      order.shoes.forEach((shoe: any) => {
         const itemType = shoe.shoe_type?.split(" - ")[0] || "Sepatu";
         const itemModel = shoe.shoe_type?.split(" - ")[1] || "";
         const title = [
@@ -163,70 +158,58 @@ export default function OrderDetail({
           Number(shoe.treatment_price) === 0
             ? "FREE"
             : rupiah(shoe.treatment_price);
-        return `
-          <div class="item">
-            <div class="name">${esc(title)}</div>
-            <div class="row small"><span>${esc(shoe.treatment?.name || "-")}</span><b>${esc(price)}</b></div>
-            <div class="small mono">${esc(shoe.shoe_code)}</div>
-          </div>`;
-      })
-      .join("");
 
-    const discountHtml =
-      order.discount_amount > 0
-        ? `<div class="row small"><span>Diskon${order.promo_notes ? ` (${esc(order.promo_notes)})` : ""}</span><span>- ${esc(rupiah(order.discount_amount))}</span></div>`
-        : "";
+        printer
+          .line(title, { bold: true })
+          .line(shoe.treatment?.name || "-")
+          .line(shoe.shoe_code)
+          .line(price, { align: Align.Right });
+      });
 
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Struk ${esc(order.invoice_number)}</title>
-      <style>
-        @page { margin: 0; }
-        * { box-sizing: border-box; }
-        html, body { margin: 0; padding: 0; background: #fff; color: #000;
-          font-family: Arial, Helvetica, sans-serif;
-          -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        .receipt { width: 57mm; padding: 2mm 3mm 4mm; font-size: 8.5pt; line-height: 1.25; }
-        .center { text-align: center; }
-        .brand { font-size: 11pt; font-weight: 800; }
-        .small { font-size: 7.5pt; }
-        .mono { font-family: "Courier New", monospace; color: #000; }
-        .row { display: flex; justify-content: space-between; gap: 2mm; }
-        .row > span:first-child { min-width: 0; word-break: break-word; }
-        .row > b, .row > span:last-child { white-space: nowrap; }
-        .hr { border-top: 0.3mm dashed #000; margin: 1.5mm 0; }
-        .item { margin-bottom: 1.5mm; }
-        .name { font-weight: 700; word-break: break-word; }
-        .total { font-size: 10pt; font-weight: 800; }
-        .badge { display: inline-block; border: 0.3mm solid #000; padding: 0 2mm;
-          font-size: 7.5pt; font-weight: 800; margin-top: 1mm; }
-      </style></head><body>
-        <div class="receipt">
-          <div class="center">
-            <div class="brand">CHAT SHOE TREATMENT</div>
-            <div class="small">${esc(order.invoice_number)}</div>
-            <div class="badge">${isPaid ? "LUNAS" : "BELUM LUNAS"}</div>
-          </div>
-          <div class="hr"></div>
-          <div class="row small"><span>Pelanggan</span><span>${esc(order.customer?.name)}</span></div>
-          <div class="row small"><span>Tanggal</span><span>${esc(formatDate(order.created_at))}</span></div>
-          <div class="row small"><span>Estimasi</span><span>${esc(estimasi)}</span></div>
-          <div class="hr"></div>
-          ${itemsHtml}
-          <div class="hr"></div>
-          ${discountHtml}
-          <div class="row total"><span>TOTAL</span><span>${esc(rupiah(order.total_price))}</span></div>
-          <div class="hr"></div>
-          <div class="center small">Terima kasih<br/>Simpan struk ini untuk pengambilan</div>
-        </div>
-      </body></html>`;
+      printer.line("--------------------------------");
 
-    printHtml(html, ".receipt");
+      if (order.discount_amount > 0) {
+        printer
+          .line(`Diskon (${order.promo_notes || "Promo"})`)
+          .line(`- ${rupiah(order.discount_amount)}`, { align: Align.Right });
+      }
+
+      printer
+        .line("--------------------------------")
+        .line("TOTAL", { bold: true })
+        .line(rupiah(order.total_price), { align: Align.Right, bold: true })
+        .line("--------------------------------")
+        .line("Terima kasih", { align: Align.Center })
+        .line("Simpan struk ini untuk pengambilan", { align: Align.Center })
+        .rule()
+        .cutPaper()
+        .execute();
+
+      toast.success("Perintah cetak struk berhasil dikirim!");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Gagal terhubung ke printer.");
+    }
   };
 
-  // Cetak stiker label
-  const handlePrintLabels = () => {
-    const estimasi = calculateMaxEstimatedDate(order);
-    const labelsHtml = order.shoes
-      .map((shoe: any) => {
+  // --- CETAK LABEL VIA BLUETOOTH ---
+  const handlePrintLabels = async () => {
+    if (typeof navigator === "undefined" || !(navigator as any).bluetooth) {
+      toast.error(
+        "Browser Anda tidak mendukung Bluetooth. Gunakan Chrome Android.",
+      );
+      return;
+    }
+
+    try {
+      const printer = new WebThermalPrinter({
+        mode: ConnectionMode.Bluetooth,
+        paperSize: PaperSize["58mm"],
+      });
+
+      await printer.connect();
+
+      for (const shoe of order.shoes) {
         const itemType = shoe.shoe_type?.split(" - ")[0] || "Sepatu";
         const itemModel = shoe.shoe_type?.split(" - ")[1] || "";
         const title = [
@@ -238,63 +221,39 @@ export default function OrderDetail({
         const price =
           Number(shoe.treatment_price) === 0
             ? "FREE"
-            : `Rp${Number(shoe.treatment_price).toLocaleString("id-ID")}`;
-        const qr = renderToStaticMarkup(
-          <QRCodeSVG value={shoe.qr_code} size={256} />,
-        );
-        return `
-          <div class="sticker">
-            <div class="left">
-              <div class="title">${esc(title)}</div>
-              <div class="meta">
-                <span>${esc(shoe.treatment?.name || "-")}</span>
-                <span>${esc(order.customer?.name)} · ${esc(order.invoice_number)}</span>
-                <span>${esc(shoe.shoe_code)} · Est. ${esc(estimasi)}</span>
-              </div>
-            </div>
-            <div class="right">
-              <div class="qr">${qr}</div>
-              <div class="price">${esc(price)}</div>
-            </div>
-          </div>`;
-      })
-      .join("");
+            : rupiah(shoe.treatment_price);
 
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Label ${esc(order.invoice_number)}</title>
-      <style>
-        @page { size: 76.75mm 59.25mm; margin: 0; }
-        * { box-sizing: border-box; }
-        html, body { margin: 0; padding: 0; background: #fff; color: #000;
-          font-family: Arial, Helvetica, sans-serif;
-          -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        .sticker { width: 76.75mm; height: 59.25mm; padding: 2mm; overflow: hidden;
-          display: grid; grid-template-columns: 1fr 27mm; gap: 1.5mm;
-          page-break-after: always; break-after: page; }
-        .sticker:last-child { page-break-after: auto; break-after: auto; }
-        .left { border: 0.4mm solid #000; display: flex; flex-direction: column;
-          justify-content: space-between; align-items: center; padding: 1.5mm; min-width: 0; }
-        .title { flex: 1; display: flex; align-items: center; justify-content: center;
-          text-align: center; font-weight: 800; font-size: 17pt; line-height: 1.1;
-          word-break: break-word; overflow: hidden; }
-        .meta { width: 100%; display: flex; flex-direction: column; gap: 0.3mm;
-          font-size: 6pt; line-height: 1.15; text-align: center;
-          border-top: 0.3mm dashed #000; padding-top: 1mm; }
-        .right { display: flex; flex-direction: column; border: 0.4mm solid #000; min-width: 0; }
-        .qr { flex: 1; display: flex; align-items: center; justify-content: center;
-          padding: 1mm; min-height: 0; }
-        .qr svg { width: 100%; height: 100%; }
-        .price { border-top: 0.4mm solid #000; text-align: center;
-          font-weight: 800; font-size: 11pt; padding: 1mm 0; }
-      </style></head><body>${labelsHtml}</body></html>`;
+        printer
+          .initialize()
+          .line("CHAT SHOE TREATMENT", { align: Align.Center, bold: true })
+          .line("--------------------------------")
+          .line(title, { bold: true })
+          .line(`Treatment: ${shoe.treatment?.name || "-"}`)
+          .line(`Pelanggan: ${order.customer?.name}`)
+          .line(`Kode: ${shoe.shoe_code}`)
+          .line(`Harga: ${price}`, { bold: true })
+          .line("--------------------------------")
+          .line(`Estimasi: ${calculateMaxEstimatedDate(order)}`, {
+            align: Align.Center,
+          })
+          .rule()
+          .cutPaper()
+          .execute();
+      }
 
-    printHtml(html);
+      toast.success("Label berhasil dikirim ke printer!");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Gagal terhubung ke printer.");
+    }
   };
 
   return (
     <div className="max-w-3xl mx-auto">
+      <iframe ref={printRef} style={{ display: "none" }} title="print-frame" />
+
       {/* HEADER UI - RAPI UNTUK MOBILE */}
       <div className="flex flex-col gap-4 mb-6 print:hidden">
-        {/* Baris 1: Tombol Kembali & Cetak */}
         <div className="flex justify-between items-center w-full gap-2">
           <button
             onClick={() => router.back()}
@@ -323,7 +282,6 @@ export default function OrderDetail({
           </div>
         </div>
 
-        {/* Baris 2: Judul Nota */}
         <div className="text-center w-full">
           <h1 className="text-lg md:text-xl font-bold">
             Nota {order.invoice_number}
