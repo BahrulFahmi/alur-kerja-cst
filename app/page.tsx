@@ -14,7 +14,7 @@ import Link from "next/link";
 import { formatDateTime } from "@/lib/format";
 
 export default function DashboardPage() {
-  const supabase = createClient();
+  // HAPUS: const supabase = createClient();
   const [loading, setLoading] = useState(true);
 
   // State Data Statistik
@@ -32,6 +32,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const fetchData = async () => {
+      const supabase = createClient(); // <-- PINDAHKAN KE SINI
+
       const today = new Date().toLocaleDateString("en-CA", {
         timeZone: "Asia/Jakarta",
       });
@@ -89,7 +91,7 @@ export default function DashboardPage() {
     };
 
     fetchData();
-  }, [supabase]);
+  }, []); // <-- Dependency array kosong (hanya jalan sekali)
 
   if (loading)
     return (
@@ -102,7 +104,6 @@ export default function DashboardPage() {
     <div className="space-y-6 max-w-7xl mx-auto pb-10 overflow-hidden">
       <div className="flex justify-between items-end">
         <div>
-          {/* Hardcode nama karena tidak ada login */}
           <h1 className="text-2xl font-bold">
             Halo, Operator (Mode Full Access)
           </h1>
