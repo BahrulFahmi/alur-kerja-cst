@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { QRCodeSVG } from "qrcode.react";
 import { useRouter } from "next/navigation";
@@ -10,6 +10,8 @@ import {
   CreditCard,
   Receipt,
   Tag,
+  X,
+  Printer,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
@@ -31,7 +33,11 @@ export default function OrderDetail({
   const [order, setOrder] = useState<any>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const printRef = useRef<HTMLIFrameElement>(null);
+
+  // State untuk Modal Preview
+  const [showPreview, setShowPreview] = useState<"label" | "struk" | null>(
+    null,
+  );
 
   const fetchData = async () => {
     const { id } = await params;
@@ -115,8 +121,8 @@ export default function OrderDetail({
 
   const rupiah = (n: number) => `Rp${Number(n || 0).toLocaleString("id-ID")}`;
 
-  // --- CETAK STRUK VIA BLUETOOTH ---
-  const handlePrintReceipt = async () => {
+  // --- FUNGSI CETAK STRUK (DIPADATKAN) ---
+  const executePrintReceipt = async () => {
     if (typeof navigator === "undefined" || !(navigator as any).bluetooth) {
       toast.error(
         "Browser Anda tidak mendukung Bluetooth. Gunakan Chrome Android.",
@@ -132,16 +138,19 @@ export default function OrderDetail({
 
       await printer.connect();
 
-      // Bangun Struk (parameter align & bold di dalam line)
+      // Inisialisasi & Header
       printer
         .initialize()
         .line("CHAT SHOE TREATMENT", { align: Align.Center, bold: true })
         .line(order.invoice_number, { align: Align.Center })
         .line(isPaid ? "LUNAS" : "BELUM LUNAS", { align: Align.Center })
-        .line("--------------------------------")
-        .line(`Pelanggan : ${order.customer?.name}`)
-        .line(`Tanggal   : ${formatDate(order.created_at)}`)
-        .line(`Estimasi  : ${calculateMaxEstimatedDate(order)}`)
+        .line("--------------------------------");
+
+      // Info Pelanggan
+      printer
+        .line(`Pelanggan: ${order.customer?.name}`)
+        .line(`Tanggal  : ${formatDate(order.created_at)}`)
+        .line(`Estimasi : ${calculateMaxEstimatedDate(order)}`)
         .line("--------------------------------");
 
       // Item-item
@@ -161,39 +170,43 @@ export default function OrderDetail({
 
         printer
           .line(title, { bold: true })
-          .line(shoe.treatment?.name || "-")
-          .line(shoe.shoe_code)
+          .line(`${shoe.treatment?.name || "-"} | ${shoe.shoe_code}`)
           .line(price, { align: Align.Right });
       });
 
       printer.line("--------------------------------");
 
+      // Diskon
       if (order.discount_amount > 0) {
         printer
           .line(`Diskon (${order.promo_notes || "Promo"})`)
           .line(`- ${rupiah(order.discount_amount)}`, { align: Align.Right });
       }
 
+      // Total
       printer
-        .line("--------------------------------")
         .line("TOTAL", { bold: true })
         .line(rupiah(order.total_price), { align: Align.Right, bold: true })
-        .line("--------------------------------")
+        .line("--------------------------------");
+
+      // Footer
+      printer
         .line("Terima kasih", { align: Align.Center })
         .line("Simpan struk ini untuk pengambilan", { align: Align.Center })
-        .rule()
+        .line("--------------------------------")
         .cutPaper()
         .execute();
 
-      toast.success("Perintah cetak struk berhasil dikirim!");
+      toast.success("Struk berhasil dikirim ke printer!");
+      setShowPreview(null);
     } catch (err: any) {
       console.error(err);
       toast.error(err.message || "Gagal terhubung ke printer.");
     }
   };
 
-  // --- CETAK LABEL VIA BLUETOOTH ---
-  const handlePrintLabels = async () => {
+  // --- FUNGSI CETAK LABEL (DENGAN QR CODE) ---
+  const executePrintLabels = async () => {
     if (typeof navigator === "undefined" || !(navigator as any).bluetooth) {
       toast.error(
         "Browser Anda tidak mendukung Bluetooth. Gunakan Chrome Android.",
@@ -227,6 +240,15 @@ export default function OrderDetail({
           .initialize()
           .line("CHAT SHOE TREATMENT", { align: Align.Center, bold: true })
           .line("--------------------------------")
+
+          // CETAK QR CODE
+          .printQRCode({
+            data: shoe.qr_code,
+            size: 6,
+            align: Align.Center,
+          })
+
+          .line("--------------------------------")
           .line(title, { bold: true })
           .line(`Treatment: ${shoe.treatment?.name || "-"}`)
           .line(`Pelanggan: ${order.customer?.name}`)
@@ -242,6 +264,7 @@ export default function OrderDetail({
       }
 
       toast.success("Label berhasil dikirim ke printer!");
+      setShowPreview(null);
     } catch (err: any) {
       console.error(err);
       toast.error(err.message || "Gagal terhubung ke printer.");
@@ -250,9 +273,7 @@ export default function OrderDetail({
 
   return (
     <div className="max-w-3xl mx-auto">
-      <iframe ref={printRef} style={{ display: "none" }} title="print-frame" />
-
-      {/* HEADER UI - RAPI UNTUK MOBILE */}
+      {/* HEADER UI */}
       <div className="flex flex-col gap-4 mb-6 print:hidden">
         <div className="flex justify-between items-center w-full gap-2">
           <button
@@ -264,7 +285,7 @@ export default function OrderDetail({
 
           <div className="flex gap-2 flex-1 md:flex-none">
             <button
-              onClick={handlePrintReceipt}
+              onClick={() => setShowPreview("struk")}
               className="neu-btn flex items-center justify-center gap-2 flex-1 md:flex-none py-2"
             >
               <Receipt className="w-4 h-4" />
@@ -272,7 +293,7 @@ export default function OrderDetail({
               <span className="md:hidden">Struk</span>
             </button>
             <button
-              onClick={handlePrintLabels}
+              onClick={() => setShowPreview("label")}
               className="neu-btn-primary flex items-center justify-center gap-2 flex-1 md:flex-none py-2"
             >
               <Tag className="w-4 h-4" />
@@ -383,6 +404,153 @@ export default function OrderDetail({
             Beberapa item sudah diproses dan tidak dapat dihapus.
           </div>
         )}
+
+      {/* MODAL PREVIEW CETAK (LEBAR 56MM) */}
+      {showPreview && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm p-4 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-slate-700 pb-3 sticky top-0 bg-slate-900 z-10">
+              <h2 className="font-bold text-lg text-accent">
+                Preview {showPreview === "struk" ? "Struk" : "Label"}
+              </h2>
+              <button
+                onClick={() => setShowPreview(null)}
+                className="text-slate-500 hover:text-slate-300"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* AREA PREVIEW (LEBAR 56MM) */}
+            <div
+              className="bg-white text-black p-3 font-mono text-[10px] w-full mx-auto shadow-inner"
+              style={{ width: "56mm" }}
+            >
+              {/* PREVIEW STRUK */}
+              {showPreview === "struk" && (
+                <div className="space-y-1">
+                  <div className="text-center font-bold text-sm">
+                    CHAT SHOE TREATMENT
+                  </div>
+                  <div className="text-center">{order.invoice_number}</div>
+                  <div className="text-center">
+                    {isPaid ? "LUNAS" : "BELUM LUNAS"}
+                  </div>
+                  <div className="border-b border-dashed border-black my-1"></div>
+                  <div>Pelanggan : {order.customer?.name}</div>
+                  <div>Tanggal : {formatDate(order.created_at)}</div>
+                  <div>Estimasi : {calculateMaxEstimatedDate(order)}</div>
+                  <div className="border-b border-dashed border-black my-1"></div>
+
+                  {order.shoes.map((shoe: any) => {
+                    const itemType =
+                      shoe.shoe_type?.split(" - ")[0] || "Sepatu";
+                    const itemModel = shoe.shoe_type?.split(" - ")[1] || "";
+                    const title = [
+                      itemType,
+                      [shoe.brand, itemModel].filter(Boolean).join(" "),
+                    ]
+                      .filter(Boolean)
+                      .join(" - ");
+                    const price =
+                      Number(shoe.treatment_price) === 0
+                        ? "FREE"
+                        : rupiah(shoe.treatment_price);
+                    return (
+                      <div key={shoe.id} className="mb-1">
+                        <div className="font-bold">{title}</div>
+                        <div>
+                          {shoe.treatment?.name || "-"} | {shoe.shoe_code}
+                        </div>
+                        <div className="text-right">{price}</div>
+                      </div>
+                    );
+                  })}
+
+                  <div className="border-b border-dashed border-black my-1"></div>
+                  {order.discount_amount > 0 && (
+                    <div className="flex justify-between">
+                      <span>Diskon</span>
+                      <span>- {rupiah(order.discount_amount)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-bold text-xs mt-1">
+                    <span>TOTAL</span>
+                    <span>{rupiah(order.total_price)}</span>
+                  </div>
+                  <div className="border-b border-dashed border-black my-1"></div>
+                  <div className="text-center mt-2">Terima kasih</div>
+                  <div className="text-center">
+                    Simpan struk ini untuk pengambilan
+                  </div>
+                </div>
+              )}
+
+              {/* PREVIEW LABEL (PER SEPATU) */}
+              {showPreview === "label" && (
+                <div className="space-y-4">
+                  {order.shoes.map((shoe: any) => {
+                    const itemType =
+                      shoe.shoe_type?.split(" - ")[0] || "Sepatu";
+                    const itemModel = shoe.shoe_type?.split(" - ")[1] || "";
+                    const title = [
+                      itemType,
+                      [shoe.brand, itemModel].filter(Boolean).join(" "),
+                    ]
+                      .filter(Boolean)
+                      .join(" - ");
+                    const price =
+                      Number(shoe.treatment_price) === 0
+                        ? "FREE"
+                        : rupiah(shoe.treatment_price);
+                    return (
+                      <div
+                        key={shoe.id}
+                        className="border-b border-dashed border-black pb-2 mb-2 last:border-0"
+                      >
+                        <div className="text-center font-bold text-sm mb-1">
+                          CHAT SHOE TREATMENT
+                        </div>
+                        <div className="flex justify-center my-2">
+                          <QRCodeSVG value={shoe.qr_code} size={80} />
+                        </div>
+                        <div className="font-bold">{title}</div>
+                        <div>Treatment: {shoe.treatment?.name || "-"}</div>
+                        <div>Pelanggan: {order.customer?.name}</div>
+                        <div>Kode: {shoe.shoe_code}</div>
+                        <div className="font-bold mt-1">Harga: {price}</div>
+                        <div className="text-center mt-1">
+                          Estimasi: {calculateMaxEstimatedDate(order)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* TOMBOL AKSI (PRINT / BATAL) */}
+            <div className="flex w-full gap-3 pt-2">
+              <button
+                onClick={() => setShowPreview(null)}
+                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-600 transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                onClick={
+                  showPreview === "struk"
+                    ? executePrintReceipt
+                    : executePrintLabels
+                }
+                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-emerald-500 hover:bg-emerald-400 flex items-center justify-center gap-2 transition-colors shadow-lg"
+              >
+                <Printer className="w-4 h-4" /> Print
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
