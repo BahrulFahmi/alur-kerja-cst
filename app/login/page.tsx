@@ -9,11 +9,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const supabase = createClient();
+  // HAPUS: const supabase = createClient();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
+    const supabase = createClient(); // <-- PINDAHKAN KE SINI
+
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
