@@ -1,83 +1,46 @@
-import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { verifyToken } from "@/lib/auth";
 
 export async function proxy(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({
-    request,
-  });
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            request.cookies.set(name, value),
-          );
-          supabaseResponse = NextResponse.next({
-            request,
-          });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options),
-          );
-        },
-      },
-    },
-  );
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const path = request.nextUrl.pathname;
 
   // Jika belum login dan mencoba akses dashboard, lempar ke login
-  if (!user && request.nextUrl.pathname.startsWith("/dashboard")) {
-    return NextResponse.redirect(new URL("/login", request.url));
-  }
+  if (
+    path.startsWith("/dashboard") ||
+    path.startsWith("/info-kerja") ||
+    path.startsWith("/transaksi") ||
+    path.startsWith("/laporan") ||
+    path.startsWith("/treatments")
+  ) {
+    const token = request.cookies.get("session")?.value;
 
-  // Proteksi Rute Berdasarkan Role
-  if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
+    if (!token) {
+      return NextResponse.redirect(new URL("/login", request.url));
+    }
 
-    const role = profile?.role;
-    const path = request.nextUrl.pathname;
+    const payload = await verifyToken(token);
+    if (!payload) {
+      return NextResponse.redirect(new URL("/login", request.url));
+    }
+
+    const role = payload.role;
 
     // Aturan Teknisi
-    // Teknisi boleh akses: Checking (Pantauan), Orders (Detail), dan My-Jobs (Pekerjaan Saya)
     if (role === "technician") {
-      if (
-        !path.startsWith("/dashboard/checking") &&
-        !path.startsWith("/dashboard/orders") &&
-        !path.startsWith("/dashboard/my-jobs")
-      ) {
-        return NextResponse.redirect(
-          new URL("/dashboard/checking", request.url),
-        );
+      if (!path.startsWith("/info-kerja")) {
+        return NextResponse.redirect(new URL("/info-kerja", request.url));
       }
     }
 
     // Aturan Kasir
-    // Kasir tidak boleh akses Treatment & Settings
     if (role === "cashier") {
-      if (
-        path.startsWith("/dashboard/treatments") ||
-        path.startsWith("/dashboard/settings")
-      ) {
-        return NextResponse.redirect(
-          new URL("/dashboard/orders/new", request.url),
-        );
+      if (path.startsWith("/treatments")) {
+        return NextResponse.redirect(new URL("/transaksi/new", request.url));
       }
     }
   }
 
-  return supabaseResponse;
+  return NextResponse.next();
 }
 
 export const config = {
