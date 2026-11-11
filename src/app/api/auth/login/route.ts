@@ -5,7 +5,6 @@ import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { createToken } from "@/lib/auth";
 
-// WAJIB: Paksa API berjalan di Node.js, bukan Edge (karena bcrypt tidak jalan di Edge)
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
@@ -18,25 +17,35 @@ export async function POST(req: Request) {
       .where(eq(profiles.email, email))
       .limit(1);
 
-    // Jika email tidak ditemukan
-    if (!user || !user.passwordHash) {
+    // KITA UBAH BAGIAN INI UNTUK MELIHAT ERROR ASLINYA
+    if (!user) {
       return NextResponse.json(
-        { error: "Email atau password salah" },
+        { error: "DEBUG: Email tidak ditemukan di database" },
         { status: 401 },
       );
     }
 
-    // Bandingkan password
+    if (!user.passwordHash) {
+      return NextResponse.json(
+        { error: "DEBUG: Hash password kosong" },
+        { status: 401 },
+      );
+    }
+
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
 
     if (!isPasswordValid) {
+      // KITA TAMPILKAN HASH YANG DIBACA OLEH SERVER
       return NextResponse.json(
-        { error: "Email atau password salah" },
+        {
+          error: "DEBUG: Password salah",
+          hashDiDatabase: user.passwordHash,
+        },
         { status: 401 },
       );
     }
 
-    // Buat token (pastikan menggunakan string)
+    // ... (sisa kode token dan cookie tetap sama)
     const token = await createToken({
       id: user.id as string,
       role: user.role as string,
@@ -47,7 +56,6 @@ export async function POST(req: Request) {
       user: { id: user.id, role: user.role, fullName: user.fullName },
     });
 
-    // Set cookie (secure: true untuk Vercel)
     response.cookies.set("session", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
