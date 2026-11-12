@@ -119,7 +119,7 @@ export default function DashboardPage() {
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-lg font-bold text-accent">Aktivitas Terbaru</h2>
             <Link
-              href="/dashboard/activity"
+              href="/activity"
               className="text-sm text-slate-400 hover:text-accent flex items-center gap-1 transition-colors"
             >
               Lihat Semua <ArrowRight className="w-4 h-4" />

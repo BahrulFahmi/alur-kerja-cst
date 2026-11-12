@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { orders, shoes, customers, treatments } from "@/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
+import { logActivity } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
-// 1. GET: Ambil data master (Treatment)
 export async function GET() {
   try {
     const treatmentsList = await db
@@ -15,17 +15,14 @@ export async function GET() {
 
     return NextResponse.json({ treatments: treatmentsList });
   } catch (error: any) {
-    console.error("GET Transaksi Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-// 2. POST: Simpan Transaksi Baru
 export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    // Validasi input dasar
     if (!body.customerName || !body.customerWhatsapp) {
       return NextResponse.json(
         { error: "Nama dan WhatsApp wajib diisi" },
@@ -37,7 +34,7 @@ export async function POST(req: Request) {
     let customerId;
     const existingCustomer = await db
       .select()
-      .from(customers) // Pastikan `customers` sudah di-import di atas
+      .from(customers)
       .where(eq(customers.whatsapp, body.customerWhatsapp))
       .limit(1);
 
@@ -65,8 +62,8 @@ export async function POST(req: Request) {
         invoiceNumber,
         customerId,
         notes: body.notes || null,
-        totalPrice: body.totalPrice || 0,
-        discountAmount: body.discountAmount || 0,
+        totalPrice: String(body.totalPrice || 0),
+        discountAmount: String(body.discountAmount || 0),
         promoNotes: body.promoNotes || null,
         paymentStatus: body.paymentStatus,
         paymentMethod: body.paymentMethod || null,
@@ -78,7 +75,7 @@ export async function POST(req: Request) {
       const shoesToInsert = body.items.map((item: any) => ({
         orderId: newOrder.id,
         treatmentId: item.treatmentId,
-        treatmentPrice: item.treatmentPrice,
+        treatmentPrice: String(item.treatmentPrice || 0),
         brand: item.brand,
         shoeType: item.model,
         itemType: item.itemType || "Sepatu",
@@ -93,6 +90,14 @@ export async function POST(req: Request) {
 
       await db.insert(shoes).values(shoesToInsert);
     }
+
+    // 5. CATAT LOG DENGAN USER ID
+    await logActivity({
+      userId: body.userId, // <-- Kirim userId ke logger
+      action: "Transaksi Baru",
+      description: `Membuat nota ${invoiceNumber} untuk ${body.customerName}`,
+      relatedTransactionId: invoiceNumber,
+    });
 
     return NextResponse.json({ success: true, orderId: newOrder.id });
   } catch (error: any) {

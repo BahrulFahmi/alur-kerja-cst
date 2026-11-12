@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Monitor,
   Wrench,
+  Activity, // <-- Tambahan Icon Activity
 } from "lucide-react";
 import { useState } from "react";
 
@@ -22,7 +23,7 @@ const allMenus = [
     roles: ["admin", "cashier"],
   },
   {
-    href: "/transaksi", // Ubah ke /transaksi agar kasir bisa lihat list riwayat
+    href: "/transaksi",
     label: "Transaksi",
     icon: PlusCircle,
     roles: ["admin", "cashier"],
@@ -31,19 +32,19 @@ const allMenus = [
     href: "/info-kerja",
     label: "Monitoring",
     icon: Monitor,
-    roles: ["admin", "cashier", "technician"], // Kasir & Teknisi bisa pantau
+    roles: ["admin", "cashier", "technician"],
   },
   {
     href: "/info-kerja/my-jobs",
     label: "Pekerjaan Saya",
     icon: Wrench,
-    roles: ["technician", "admin"], // Hanya teknisi (dan admin)
+    roles: ["technician", "admin"],
   },
   {
     href: "/treatments",
     label: "Treatment",
     icon: Tags,
-    roles: ["admin"], // Hanya admin
+    roles: ["admin"],
   },
   {
     href: "/laporan",

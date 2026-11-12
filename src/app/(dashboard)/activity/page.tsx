@@ -1,33 +1,37 @@
 "use client";
 import { useState, useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { Loader2, Activity, Search } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
+import { toast } from "sonner";
 
 export default function ActivityLogPage() {
-  const supabase = createClient();
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
     const fetchLogs = async () => {
-      const { data } = await supabase
-        .from("activity_logs")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(100); // Ambil 100 log terbaru
+      try {
+        setLoading(true);
+        const res = await fetch("/api/activity", { cache: "no-store" });
+        if (!res.ok) throw new Error("Gagal memuat log aktivitas");
 
-      if (data) setLogs(data);
-      setLoading(false);
+        const data = await res.json();
+        setLogs(data);
+      } catch (err: any) {
+        console.error(err);
+        toast.error(err.message);
+      } finally {
+        setLoading(false);
+      }
     };
     fetchLogs();
-  }, [supabase]);
+  }, []);
 
   const filteredLogs = logs.filter(
     (l) =>
       l.user_name?.toLowerCase().includes(search.toLowerCase()) ||
-      l.action.toLowerCase().includes(search.toLowerCase()) ||
+      l.action?.toLowerCase().includes(search.toLowerCase()) ||
       l.related_transaction_id?.toLowerCase().includes(search.toLowerCase()),
   );
 

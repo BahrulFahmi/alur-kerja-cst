@@ -43,7 +43,10 @@ export default function NewOrderPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [treatments, setTreatments] = useState<any[]>([]);
-  const [promos, setPromos] = useState<any[]>([]); // State untuk Promo
+  const [promos, setPromos] = useState<any[]>([]);
+
+  // State untuk menyimpan data user yang login
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   const today = new Date().toLocaleDateString("en-CA", {
     timeZone: "Asia/Jakarta",
@@ -56,7 +59,7 @@ export default function NewOrderPage() {
     notes: "",
     payment_status: "unpaid",
     payment_method: "",
-    promo_id: "", // State untuk promo yang dipilih
+    promo_id: "",
   });
 
   const [shoes, setShoes] = useState<ShoeInput[]>([{ ...emptyShoe }]);
@@ -64,10 +67,16 @@ export default function NewOrderPage() {
   useEffect(() => {
     const fetchMaster = async () => {
       try {
+        // 1. Ambil data treatment & promo
         const res = await fetch("/api/transaksi", { cache: "no-store" });
         const data = await res.json();
         if (data.treatments) setTreatments(data.treatments);
-        if (data.promos) setPromos(data.promos); // Ambil data promo
+        if (data.promos) setPromos(data.promos);
+
+        // 2. Ambil data user yang sedang login (untuk Activity Log)
+        const meRes = await fetch("/api/auth/me");
+        const meData = await meRes.json();
+        if (meData.user) setCurrentUser(meData.user);
       } catch (error) {
         console.error("Gagal ambil data master:", error);
       }
@@ -157,6 +166,7 @@ export default function NewOrderPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          userId: currentUser?.id, // <-- KIRIM USER ID UNTUK LOG
           customerName: form.name,
           customerWhatsapp: form.whatsapp,
           items: itemsData,
@@ -395,7 +405,6 @@ export default function NewOrderPage() {
           Pembayaran & Promo
         </h2>
 
-        {/* Input Promo */}
         <div>
           <label className="text-xs text-slate-400 mb-1 block">
             Pilih Promo (Opsional)
