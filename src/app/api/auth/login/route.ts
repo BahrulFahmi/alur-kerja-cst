@@ -21,7 +21,7 @@ export async function POST(req: Request) {
 
     if (!user || !user.passwordHash) {
       return NextResponse.json(
-        { error: "Email tidak ditemukan" },
+        { error: "Email atau password salah" },
         { status: 401 },
       );
     }
@@ -29,13 +29,8 @@ export async function POST(req: Request) {
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
 
     if (!isPasswordValid) {
-      // KITA KEMBALIKAN HASH YANG DIBACA OLEH VERCEL KE BROWSER
       return NextResponse.json(
-        {
-          error: "Password salah",
-          hashDibacaVercel: user.passwordHash,
-          passwordYangDikirim: password,
-        },
+        { error: "Email atau password salah" },
         { status: 401 },
       );
     }
@@ -60,6 +55,10 @@ export async function POST(req: Request) {
 
     return response;
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Login Error:", error);
+    return NextResponse.json(
+      { error: "Terjadi kesalahan server" },
+      { status: 500 },
+    );
   }
 }
