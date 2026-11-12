@@ -38,7 +38,7 @@ const allMenus = [
     href: "/info-kerja/my-jobs",
     label: "Pekerjaan Saya",
     icon: Wrench,
-    roles: ["technician", "admin"],
+    roles: ["technician"],
   },
   {
     href: "/treatments",
