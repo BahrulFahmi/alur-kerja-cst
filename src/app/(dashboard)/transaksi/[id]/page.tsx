@@ -207,7 +207,7 @@ export default function OrderDetail({
     }
   };
 
-  // --- FUNGSI CETAK LABEL ---
+  // --- FUNGSI CETAK LABEL (DIPERBAIKI) ---
   const executePrintLabels = async () => {
     if (typeof navigator === "undefined" || !(navigator as any).bluetooth) {
       toast.error(
@@ -224,6 +224,10 @@ export default function OrderDetail({
 
       await printer.connect();
 
+      // 1. Inisialisasi printer sekali di awal
+      printer.initialize();
+
+      // 2. Cetak semua label secara berurutan tanpa memotong kertas
       for (const shoe of order.shoes) {
         const itemType = shoe.shoeType?.split(" - ")[0] || "Sepatu";
         const itemModel = shoe.shoeType?.split(" - ")[1] || "";
@@ -239,7 +243,6 @@ export default function OrderDetail({
             : rupiah(shoe.treatmentPrice);
 
         printer
-          .initialize()
           .line("CHAT SHOE TREATMENT", { align: Align.Center, bold: true })
           .line(order.invoiceNumber, { align: Align.Center })
           .line("--------------------------------")
@@ -255,11 +258,14 @@ export default function OrderDetail({
             `Harga: ${price} | Estimasi: ${calculateMaxEstimatedDate(order)}`,
           )
           .line("--------------------------------")
-          .cutPaper()
-          .execute();
+          .line("") // Jarak antar label
+          .line("");
       }
 
-      toast.success("Label berhasil dikirim ke printer!");
+      // 3. Potong kertas HANYA sekali di akhir setelah semua label tercetak
+      printer.cutPaper().execute();
+
+      toast.success("Semua label berhasil dikirim ke printer!");
       setShowPreview(null);
     } catch (err: any) {
       console.error(err);
