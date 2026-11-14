@@ -133,7 +133,7 @@ export default function OrderDetail({
 
   const rupiah = (n: number) => `Rp${Number(n || 0).toLocaleString("id-ID")}`;
 
-  // --- FUNGSI CETAK STRUK ---
+  // --- FUNGSI CETAK STRUK (DIPADATKAN) ---
   const executePrintReceipt = async () => {
     if (typeof navigator === "undefined" || !(navigator as any).bluetooth) {
       toast.error(
@@ -150,17 +150,21 @@ export default function OrderDetail({
 
       await printer.connect();
 
+      // Header
       printer
         .initialize()
         .line("CHAT SHOE TREATMENT", { align: Align.Center, bold: true })
-        .line(order.invoiceNumber, { align: Align.Center })
-        .line(isPaid ? "LUNAS" : "BELUM LUNAS", { align: Align.Center })
-        .line("--------------------------------")
-        .line(`Pelanggan: ${order.customer?.name}`)
+        .line("--------------------------------");
+
+      // Info Transaksi
+      printer
+        .line(`No. Nota : ${order.invoiceNumber}`)
         .line(`Tanggal  : ${formatDate(order.createdAt)}`)
+        .line(`Pelanggan: ${order.customer?.name}`)
         .line(`Estimasi : ${calculateMaxEstimatedDate(order)}`)
         .line("--------------------------------");
 
+      // Daftar Item (Rapat)
       order.shoes.forEach((shoe: any) => {
         const itemType = shoe.shoeType?.split(" - ")[0] || "Sepatu";
         const itemModel = shoe.shoeType?.split(" - ")[1] || "";
@@ -176,13 +180,14 @@ export default function OrderDetail({
             : rupiah(shoe.treatmentPrice);
 
         printer
-          .line(title, { bold: true })
-          .line(`${shoe.treatment?.name || "-"} | ${shoe.shoeCode}`)
-          .line(price, { align: Align.Right });
+          .line(`${title} | ${shoe.treatment?.name || "-"}`)
+          .line(`${shoe.shoeCode}`, { align: Align.Right }) // Kode kecil di kanan
+          .line(price, { align: Align.Right, bold: true }); // Harga di kanan
       });
 
       printer.line("--------------------------------");
 
+      // Diskon & Total
       if (order.discountAmount > 0) {
         printer
           .line(`Diskon (${order.promoNotes || "Promo"})`)
@@ -193,6 +198,10 @@ export default function OrderDetail({
         .line("TOTAL", { bold: true })
         .line(rupiah(order.totalPrice), { align: Align.Right, bold: true })
         .line("--------------------------------")
+        .line(isPaid ? "LUNAS" : "BELUM LUNAS", {
+          align: Align.Center,
+          bold: true,
+        })
         .line("Terima kasih", { align: Align.Center })
         .line("Simpan struk ini untuk pengambilan", { align: Align.Center })
         .line("--------------------------------")
