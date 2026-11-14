@@ -26,9 +26,10 @@ export async function GET() {
         qrCode: shoes.qrCode,
         shoeCode: shoes.shoeCode,
         treatmentPrice: shoes.treatmentPrice,
-        orderId: orders.id,
+        orderId: orders.id, // <-- Ambil ID order
         invoiceNumber: orders.invoiceNumber,
         paymentStatus: orders.paymentStatus,
+        totalPrice: orders.totalPrice, // <-- Ambil total price
         customerName: customers.name,
         treatmentName: treatments.name,
         durationMaxDays: treatments.durationMaxDays,

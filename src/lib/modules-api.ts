@@ -8,7 +8,13 @@ export const MODULE_ATURAN_API: Record<string, ApiAccessRule> = {
     roles: ["owner", "admin", "cashier", "technician"],
   },
   "/api/info-kerja/[id]/take": { type: "role", roles: ["technician"] },
-  "/api/info-kerja/[id]/status": { type: "role", roles: ["technician"] },
+
+  // DIPERBAIKI: Kasir & Admin sekarang bisa update status (untuk Siap Ambil)
+  "/api/info-kerja/[id]/status": {
+    type: "role",
+    roles: ["technician", "cashier", "admin", "owner"],
+  },
+
   "/api/info-kerja/[id]/handover": {
     type: "role",
     roles: ["owner", "admin", "cashier"],
@@ -19,9 +25,9 @@ export const MODULE_ATURAN_API: Record<string, ApiAccessRule> = {
   },
   "/api/my-jobs": { type: "role", roles: ["technician", "admin"] },
   "/api/treatments": { type: "role", roles: ["owner", "admin"] },
-  "/api/treatments/[id]": { type: "role", roles: ["owner"] }, // Hanya Owner yg bisa edit/hapus
+  "/api/treatments/[id]": { type: "role", roles: ["owner"] },
   "/api/laporan": { type: "role", roles: ["owner", "admin", "cashier"] },
-  "/api/laporan/[id]": { type: "role", roles: ["owner"] }, // Hanya Owner yg bisa edit/hapus data
+  "/api/laporan/[id]": { type: "role", roles: ["owner"] },
   "/api/activity": { type: "role", roles: ["owner", "admin", "cashier"] },
   "/api/dashboard": { type: "role", roles: ["owner", "admin", "cashier"] },
 };

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Loader2,
   Search,
@@ -145,7 +145,7 @@ export default function CheckingPage() {
       const isOverdue = diffDays > 3 && s.shoeStatus !== "sudah_diambil";
 
       if ((activeTab as string) === "overdue") return isOverdue;
-      if (isOverdue && (activeTab as string) !== "overdue") return false;
+      if (isOverdue && activeTab !== "overdue") return false;
 
       if (activeTab === "belum") return s.shoeStatus === "menunggu_pengerjaan";
       if (activeTab === "dikerjakan")
@@ -198,9 +198,11 @@ export default function CheckingPage() {
   const closeScanner = async () => {
     if (html5QrCode) {
       try {
-        await html5QrCode.stop();
+        if (html5QrCode.isScanning) {
+          await html5QrCode.stop();
+        }
       } catch (e) {
-        console.error("Gagal stop scanner", e);
+        // Abaikan error jika scanner sudah berhenti
       }
       setHtml5QrCode(null);
     }
@@ -217,9 +219,7 @@ export default function CheckingPage() {
 
       if (!foundShoe) throw new Error("QR Code tidak valid.");
       if (foundShoe.shoeStatus !== "menunggu_pengerjaan") {
-        throw new Error(
-          `Sepatu sudah dikerjakan (Status: ${STATUS_MAP[foundShoe.shoeStatus]?.label || foundShoe.shoeStatus}).`,
-        );
+        throw new Error(`Sepatu sudah dikerjakan.`);
       }
 
       setScannedShoe(foundShoe);
@@ -249,7 +249,7 @@ export default function CheckingPage() {
           },
           () => {},
         );
-      } catch {
+      } catch (err: any) {
         setCameraError("Gagal membuka kamera.");
       }
     };
@@ -313,9 +313,15 @@ export default function CheckingPage() {
 
   const handlePayNow = async () => {
     if (!selectedMethod) return toast.error("Pilih metode pembayaran!");
+
+    // PERBAIKAN: Cek apakah payingOrder dan order-nya ada
+    if (!payingOrder?.order?.id) {
+      return toast.error("Data order tidak ditemukan.");
+    }
+
     setUpdatingId(payingOrder.order.id);
     try {
-      const res = await fetch(`/api/transaksi/${payingOrder.order.id}/pay`, {
+      const res = await fetch(`/api/info-kerja/${payingOrder.order.id}/pay`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ paymentMethod: selectedMethod }),
@@ -373,6 +379,7 @@ export default function CheckingPage() {
             Pusat kendali operasional.
           </p>
         </div>
+
         {currentUser?.role === "technician" && (
           <button
             onClick={startScanner}
@@ -477,7 +484,8 @@ export default function CheckingPage() {
                     currentUser?.role === "technician" && isMyJob;
                   const isCashierOrAdmin =
                     currentUser?.role === "cashier" ||
-                    currentUser?.role === "admin";
+                    currentUser?.role === "admin" ||
+                    currentUser?.role === "owner";
 
                   const statusInfo =
                     STATUS_MAP[shoe.shoeStatus] ||
@@ -529,15 +537,23 @@ export default function CheckingPage() {
                             )}
                         </div>
                       </td>
+
+                      {/* STATUS BAYAR (DIUBAH JADI TOMBOL) */}
                       <td className="px-3 py-3 text-center">
                         <span
-                          className={`neu-badge text-[10px] uppercase ${shoe.order?.paymentStatus === "paid" ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}
+                          className={`neu-badge text-[10px] uppercase ${
+                            shoe.order?.paymentStatus === "paid"
+                              ? "bg-green-500/10 text-green-400"
+                              : "bg-red-500/10 text-red-400"
+                          }`}
                         >
                           {shoe.order?.paymentStatus === "paid"
                             ? "Lunas"
                             : "Belum Lunas"}
                         </span>
                       </td>
+
+                      {/* AKSI */}
                       <td className="px-3 py-3 text-center">
                         <div className="flex items-center justify-center gap-2">
                           <Link
@@ -547,59 +563,54 @@ export default function CheckingPage() {
                             <Eye className="w-4 h-4" />
                           </Link>
 
-                          {activeTab === "dikerjakan" &&
-                            currentUser?.role === "technician" &&
-                            canUpdateStatus && (
-                              <div className="flex gap-1">
-                                {shoe.shoeStatus === "sedang_dikerjakan" && (
-                                  <button
-                                    onClick={() =>
-                                      updateStatus(shoe.id, "proses_pencucian")
-                                    }
-                                    disabled={updatingId === shoe.id}
-                                    className="neu-btn !py-1 !px-2 text-[10px]"
-                                  >
-                                    Mulai Cuci
-                                  </button>
-                                )}
-                                {shoe.shoeStatus === "proses_pencucian" && (
-                                  <button
-                                    onClick={() =>
-                                      updateStatus(
-                                        shoe.id,
-                                        "proses_pengeringan",
-                                      )
-                                    }
-                                    disabled={updatingId === shoe.id}
-                                    className="neu-btn !py-1 !px-2 text-[10px]"
-                                  >
-                                    Selesai Cuci
-                                  </button>
-                                )}
-                                {shoe.shoeStatus === "proses_pengeringan" && (
-                                  <button
-                                    onClick={() =>
-                                      updateStatus(shoe.id, "proses_finishing")
-                                    }
-                                    disabled={updatingId === shoe.id}
-                                    className="neu-btn !py-1 !px-2 text-[10px]"
-                                  >
-                                    Selesai Kering
-                                  </button>
-                                )}
-                                {shoe.shoeStatus === "proses_finishing" && (
-                                  <button
-                                    onClick={() =>
-                                      updateStatus(shoe.id, "selesai_dicuci")
-                                    }
-                                    disabled={updatingId === shoe.id}
-                                    className="neu-btn-primary !py-1 !px-2 text-[10px]"
-                                  >
-                                    Selesai Finishing
-                                  </button>
-                                )}
-                              </div>
-                            )}
+                          {activeTab === "dikerjakan" && canUpdateStatus && (
+                            <div className="flex gap-1">
+                              {shoe.shoeStatus === "sedang_dikerjakan" && (
+                                <button
+                                  onClick={() =>
+                                    updateStatus(shoe.id, "proses_pencucian")
+                                  }
+                                  disabled={updatingId === shoe.id}
+                                  className="neu-btn !py-1 !px-2 text-[10px]"
+                                >
+                                  Mulai Cuci
+                                </button>
+                              )}
+                              {shoe.shoeStatus === "proses_pencucian" && (
+                                <button
+                                  onClick={() =>
+                                    updateStatus(shoe.id, "proses_pengeringan")
+                                  }
+                                  disabled={updatingId === shoe.id}
+                                  className="neu-btn !py-1 !px-2 text-[10px]"
+                                >
+                                  Selesai Cuci
+                                </button>
+                              )}
+                              {shoe.shoeStatus === "proses_pengeringan" && (
+                                <button
+                                  onClick={() =>
+                                    updateStatus(shoe.id, "proses_finishing")
+                                  }
+                                  disabled={updatingId === shoe.id}
+                                  className="neu-btn !py-1 !px-2 text-[10px]"
+                                >
+                                  Selesai Kering
+                                </button>
+                              )}
+                              {shoe.shoeStatus === "proses_finishing" && (
+                                <button
+                                  onClick={() =>
+                                    updateStatus(shoe.id, "selesai_dicuci")
+                                  }
+                                  disabled={updatingId === shoe.id}
+                                  className="neu-btn-primary !py-1 !px-2 text-[10px]"
+                                >
+                                  Selesai Finishing
+                                </button>
+                              )}
+                            </div>
+                          )}
 
                           {activeTab === "selesai" && isCashierOrAdmin && (
                             <button
@@ -611,29 +622,26 @@ export default function CheckingPage() {
                             </button>
                           )}
 
-                          {activeTab === "selesai" &&
-                            currentUser?.role === "cashier" && (
-                              <div className="flex gap-1">
-                                {shoe.order?.paymentStatus !== "paid" && (
-                                  <button
-                                    onClick={() => setPayingOrder(shoe)}
-                                    className="neu-btn !py-1 !px-3 text-xs border-red-500/50 text-red-400 hover:bg-red-500/10"
-                                  >
-                                    Bayar
-                                  </button>
-                                )}
+                          {activeTab === "siap_diambil" && isCashierOrAdmin && (
+                            <div className="flex gap-1">
+                              {shoe.order?.paymentStatus !== "paid" ? (
+                                <button
+                                  onClick={() => setPayingOrder(shoe)}
+                                  className="neu-btn !py-1 !px-3 text-xs border-red-500/50 text-red-400 hover:bg-red-500/10"
+                                >
+                                  Bayar
+                                </button>
+                              ) : (
                                 <button
                                   onClick={() => handleHandover(shoe)}
-                                  disabled={
-                                    updatingId === shoe.id ||
-                                    shoe.order?.paymentStatus !== "paid"
-                                  }
-                                  className={`neu-btn-primary !py-1 !px-3 text-xs ${shoe.order?.paymentStatus !== "paid" ? "opacity-30 cursor-not-allowed" : ""}`}
+                                  disabled={updatingId === shoe.id}
+                                  className="neu-btn-primary !py-1 !px-3 text-xs"
                                 >
                                   Serahkan
                                 </button>
-                              </div>
-                            )}
+                              )}
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>

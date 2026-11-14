@@ -9,7 +9,7 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  // 1. Jalankan Satpam API (Pastikan hanya technician yang bisa akses)
+  // 1. Satpam API (Pastikan role diizinkan)
   const { error, session } = await guardApi("/api/info-kerja/[id]/status");
   if (error) return error;
 
@@ -18,27 +18,7 @@ export async function PATCH(
     const body = await req.json();
     const newStatus = body.status;
 
-    // 2. VERIFIKASI: Apakah sepatu ini benar-benar sedang dipegang oleh teknisi ini?
-    const [assignment] = await db
-      .select()
-      .from(shoeAssignments)
-      .where(
-        and(
-          eq(shoeAssignments.shoeId, shoeId),
-          eq(shoeAssignments.technicianId, session.id as string),
-          eq(shoeAssignments.assignmentStatus, "active"),
-        ),
-      )
-      .limit(1);
-
-    if (!assignment) {
-      return NextResponse.json(
-        { error: "Akses Ditolak: Anda tidak sedang mengerjakan sepatu ini." },
-        { status: 403 },
-      );
-    }
-
-    // 3. Ambil status sebelumnya untuk log
+    // 2. Cek sepatu ada atau tidak
     const [currentShoe] = await db
       .select()
       .from(shoes)
@@ -47,9 +27,31 @@ export async function PATCH(
 
     if (!currentShoe) {
       return NextResponse.json(
-        { error: "Sepatu tidak ditemukan." },
+        { error: "Sepatu tidak ditemukan" },
         { status: 404 },
       );
+    }
+
+    // 3. Jika yang mengubah adalah TEKNISI, pastikan dia yang memegang sepatu ini
+    if (session.role === "technician") {
+      const [assignment] = await db
+        .select()
+        .from(shoeAssignments)
+        .where(
+          and(
+            eq(shoeAssignments.shoeId, shoeId),
+            eq(shoeAssignments.technicianId, session.id as string),
+            eq(shoeAssignments.assignmentStatus, "active"),
+          ),
+        )
+        .limit(1);
+
+      if (!assignment) {
+        return NextResponse.json(
+          { error: "Akses Ditolak: Anda tidak sedang mengerjakan sepatu ini." },
+          { status: 403 },
+        );
+      }
     }
 
     // 4. Update status sepatu
@@ -58,21 +60,21 @@ export async function PATCH(
       .set({ shoeStatus: newStatus })
       .where(eq(shoes.id, shoeId));
 
-    // 5. Simpan riwayat status
+    // 5. Catat riwayat status
     await db.insert(shoeStatusHistory).values({
       shoeId: shoeId,
       previousStatus: currentShoe.shoeStatus,
       newStatus: newStatus,
       changedBy: session.id as string,
-      notes: `Update status oleh teknisi`,
+      notes: `Update status oleh ${session.role}`,
     });
 
-    // 6. Jika selesai, matikan assignment
-    if (newStatus === "selesai_dicuci") {
+    // 6. Jika selesai, matikan assignment (hanya untuk teknisi)
+    if (newStatus === "selesai_dicuci" && session.role === "technician") {
       await db
         .update(shoeAssignments)
         .set({ assignmentStatus: "completed", completedAt: new Date() })
-        .where(eq(shoeAssignments.id, assignment.id));
+        .where(eq(shoeAssignments.shoeId, shoeId));
     }
 
     // 7. Catat log aktivitas

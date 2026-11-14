@@ -9,13 +9,14 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  // 1. Satpam API (Hanya Admin & Kasir)
+  // 1. Satpam API
   const { error, session } = await guardApi("/api/info-kerja/[id]/handover");
   if (error) return error;
 
   try {
     const { id: shoeId } = await params;
 
+    // 2. Ambil data sepatu & order (untuk cek status bayar)
     const [shoe] = await db
       .select({
         id: shoes.id,
@@ -28,11 +29,14 @@ export async function POST(
       .where(eq(shoes.id, shoeId))
       .limit(1);
 
-    if (!shoe)
+    if (!shoe) {
       return NextResponse.json(
         { error: "Sepatu tidak ditemukan" },
         { status: 404 },
       );
+    }
+
+    // 3. Validasi
     if (shoe.shoeStatus !== "siap_diambil") {
       return NextResponse.json(
         { error: "Sepatu belum siap diambil" },
@@ -46,19 +50,19 @@ export async function POST(
       );
     }
 
-    // 2. Catat penyerahan
+    // 4. Catat penyerahan
     await db.insert(orderHandover).values({
       shoeId: shoeId,
       handedOverAt: new Date(),
     });
 
-    // 3. Ubah status sepatu
+    // 5. Ubah status sepatu menjadi sudah diambil
     await db
       .update(shoes)
       .set({ shoeStatus: "sudah_diambil" })
       .where(eq(shoes.id, shoeId));
 
-    // 4. Log
+    // 6. Log
     await logActivity({
       userId: session.id as string,
       action: "Serah Terima",
@@ -68,6 +72,7 @@ export async function POST(
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
+    console.error("HANDOVER Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
