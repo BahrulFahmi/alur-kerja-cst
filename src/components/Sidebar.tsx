@@ -31,6 +31,20 @@ export default function Sidebar({ profile }: { profile: any }) {
     {} as Record<string, typeof allowedMenus>,
   );
 
+  // FUNGSI PENGECEKAN AKTIF (DIPERBAIKI)
+  const checkIsActive = (href: string) => {
+    // 1. Jika URL saat ini sama persis dengan href menu, maka aktif.
+    if (pathname === href) return true;
+
+    // 2. Jika menu adalah "/info-kerja", pastikan URL saat ini BUKAN "/info-kerja/my-jobs"
+    if (href === "/info-kerja") {
+      return false; // Karena jika pathname lebih panjang, berarti bukan menu Monitoring.
+    }
+
+    // 3. Untuk sub-path (misal /transaksi/123), menu /transaksi harus tetap aktif.
+    return pathname.startsWith(href + "/");
+  };
+
   const logout = async () => {
     const isConfirmed = window.confirm(
       "Apakah Anda yakin ingin keluar dari aplikasi?",
@@ -65,8 +79,8 @@ export default function Sidebar({ profile }: { profile: any }) {
               </p>
               <div className="space-y-1">
                 {menus.map((m) => {
-                  const isActive =
-                    pathname === m.href || pathname.startsWith(m.href + "/");
+                  // Gunakan fungsi checkIsActive
+                  const isActive = checkIsActive(m.href);
 
                   // Mapping string icon ke komponen Lucide
                   const Icon =
@@ -99,8 +113,7 @@ export default function Sidebar({ profile }: { profile: any }) {
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-2 py-1">
         <div className="flex justify-around items-center w-full">
           {allowedMenus.slice(0, 5).map((m) => {
-            const isActive =
-              pathname === m.href || pathname.startsWith(m.href + "/");
+            const isActive = checkIsActive(m.href);
             const Icon = (Icons as any)[m.icon || "Circle"] || Icons.Circle;
 
             return (

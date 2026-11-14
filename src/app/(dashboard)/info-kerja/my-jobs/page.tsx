@@ -49,7 +49,9 @@ export default function MyJobsPage() {
   const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [setCurrentUser] = useState<any>(null);
+
+  // PERBAIKAN: Deklarasi state yang benar
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   const fetchJobs = async () => {
     try {
@@ -81,7 +83,7 @@ export default function MyJobsPage() {
       setJobs(data);
     } catch (err: any) {
       console.error(err);
-      toast.error(err.message); // Menampilkan pesan error dari database
+      toast.error(err.message);
     } finally {
       setLoading(false);
     }
@@ -94,7 +96,6 @@ export default function MyJobsPage() {
   const updateStatus = async (shoeId: string, newStatus: string) => {
     setUpdatingId(shoeId);
     try {
-      // Cukup kirim statusnya saja. Satpam API akan mendeteksi siapa yang login.
       const res = await fetch(`/api/info-kerja/${shoeId}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -112,7 +113,7 @@ export default function MyJobsPage() {
         toast.success("Status berhasil diperbarui!");
       }
 
-      await fetchJobs(); // Refresh data
+      await fetchJobs();
     } catch (err: any) {
       toast.error(err.message);
     } finally {

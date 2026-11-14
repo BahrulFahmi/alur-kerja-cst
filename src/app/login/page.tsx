@@ -29,9 +29,12 @@ export default function LoginPage() {
 
       toast.success("Login berhasil!");
 
-      // PENTING: Arahkan ke dashboard dan refresh agar cookie terbaca
-      router.push("/dashboard");
-      router.refresh();
+      // ARAHKAN SESUAI ROLE
+      if (data.user?.role === "technician") {
+        window.location.href = "/info-kerja"; // Teknisi langsung ke Monitoring
+      } else {
+        window.location.href = "/dashboard"; // Admin, Kasir, Owner ke Dashboard
+      }
     } catch (err: any) {
       toast.error(err.message);
       setLoading(false); // Hentikan loading hanya jika gagal
