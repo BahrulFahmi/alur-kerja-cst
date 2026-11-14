@@ -49,7 +49,7 @@ export default function MyJobsPage() {
   const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [setCurrentUser] = useState<any>(null);
 
   const fetchJobs = async () => {
     try {
@@ -91,23 +91,14 @@ export default function MyJobsPage() {
     fetchJobs();
   }, []);
 
-  const updateStatus = async (
-    shoeId: string,
-    newStatus: string,
-    prevStatus: string,
-  ) => {
+  const updateStatus = async (shoeId: string, newStatus: string) => {
     setUpdatingId(shoeId);
     try {
-      if (!currentUser) throw new Error("Sesi login habis.");
-
+      // Cukup kirim statusnya saja. Satpam API akan mendeteksi siapa yang login.
       const res = await fetch(`/api/info-kerja/${shoeId}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          status: newStatus,
-          technicianId: currentUser.id,
-          previousStatus: prevStatus,
-        }),
+        body: JSON.stringify({ status: newStatus }),
       });
 
       if (!res.ok) {
@@ -115,12 +106,13 @@ export default function MyJobsPage() {
         throw new Error(errData.error || "Gagal update status.");
       }
 
-      toast.success(
-        newStatus === "selesai_dicuci"
-          ? "Pekerjaan selesai!"
-          : "Status diperbarui!",
-      );
-      await fetchJobs();
+      if (newStatus === "selesai_dicuci") {
+        toast.success("Pekerjaan selesai! Sepatu siap dicek Kasir.");
+      } else {
+        toast.success("Status berhasil diperbarui!");
+      }
+
+      await fetchJobs(); // Refresh data
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -200,11 +192,7 @@ export default function MyJobsPage() {
                     {shoe.shoe_status === "sedang_dikerjakan" && (
                       <button
                         onClick={() =>
-                          updateStatus(
-                            shoe.id,
-                            "proses_pencucian",
-                            shoe.shoe_status,
-                          )
+                          updateStatus(shoe.id, "proses_pencucian")
                         }
                         disabled={updatingId === shoe.id}
                         className="neu-btn text-xs px-3 py-2 flex items-center gap-2 flex-1 md:flex-none justify-center"
@@ -220,11 +208,7 @@ export default function MyJobsPage() {
                     {shoe.shoe_status === "proses_pencucian" && (
                       <button
                         onClick={() =>
-                          updateStatus(
-                            shoe.id,
-                            "proses_pengeringan",
-                            shoe.shoe_status,
-                          )
+                          updateStatus(shoe.id, "proses_pengeringan")
                         }
                         disabled={updatingId === shoe.id}
                         className="neu-btn text-xs px-3 py-2 flex items-center gap-2 flex-1 md:flex-none justify-center"
@@ -240,11 +224,7 @@ export default function MyJobsPage() {
                     {shoe.shoe_status === "proses_pengeringan" && (
                       <button
                         onClick={() =>
-                          updateStatus(
-                            shoe.id,
-                            "proses_finishing",
-                            shoe.shoe_status,
-                          )
+                          updateStatus(shoe.id, "proses_finishing")
                         }
                         disabled={updatingId === shoe.id}
                         className="neu-btn text-xs px-3 py-2 flex items-center gap-2 flex-1 md:flex-none justify-center"
@@ -259,13 +239,7 @@ export default function MyJobsPage() {
                     )}
                     {shoe.shoe_status === "proses_finishing" && (
                       <button
-                        onClick={() =>
-                          updateStatus(
-                            shoe.id,
-                            "selesai_dicuci",
-                            shoe.shoe_status,
-                          )
-                        }
+                        onClick={() => updateStatus(shoe.id, "selesai_dicuci")}
                         disabled={updatingId === shoe.id}
                         className="neu-btn-primary text-xs px-3 py-2 flex items-center gap-2 flex-1 md:flex-none justify-center"
                       >

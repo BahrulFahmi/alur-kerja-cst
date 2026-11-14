@@ -10,12 +10,17 @@ import {
   orderHandover,
 } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { guardApi } from "@/lib/server/api-guard"; // <-- Tambahan Satpam
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  // 1. Jalankan Satpam API (Cek sesi dan role)
+  const { error } = await guardApi("/api/laporan");
+  if (error) return error;
+
   try {
-    // 1. Ambil data sepatu + relasi
+    // 2. Ambil data sepatu + relasi
     const rawShoes = await db
       .select({
         id: shoes.id,
@@ -40,7 +45,7 @@ export async function GET() {
       .leftJoin(treatments, eq(shoes.treatmentId, treatments.id))
       .orderBy(desc(shoes.createdAt));
 
-    // 2. Ambil assignment
+    // 3. Ambil assignment
     const assignments = await db
       .select({
         shoeId: shoeAssignments.shoeId,
@@ -50,7 +55,7 @@ export async function GET() {
       .from(shoeAssignments)
       .leftJoin(profiles, eq(shoeAssignments.technicianId, profiles.id));
 
-    // 3. Ambil handover
+    // 4. Ambil handover
     const handovers = await db
       .select({
         shoeId: orderHandover.shoeId,
@@ -58,14 +63,14 @@ export async function GET() {
       })
       .from(orderHandover);
 
-    // 4. Daftar Master Treatment & Teknisi
+    // 5. Daftar Master Treatment & Teknisi
     const treatmentsList = await db.select().from(treatments);
     const techniciansList = await db
       .select()
       .from(profiles)
       .where(eq(profiles.role, "technician"));
 
-    // 5. Customer + Orders (Gunakan raw SQL untuk json_agg atau ambil manual)
+    // 6. Customer + Orders
     const customersData = await db.select().from(customers);
     const ordersData = await db.select().from(orders);
 
@@ -74,7 +79,7 @@ export async function GET() {
       orders: ordersData.filter((o) => o.customerId === c.id),
     }));
 
-    // Gabungkan relasi ke objek shoes
+    // 7. Gabungkan relasi ke objek shoes
     const combinedData = rawShoes.map((s) => ({
       id: s.id,
       brand: s.brand,

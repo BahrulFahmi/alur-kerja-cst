@@ -1,18 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Plus,
-  Trash2,
-  Loader2,
-  QrCode,
-  Tag,
-  Clock,
-  Upload,
-  X,
-} from "lucide-react";
+import { Plus, Trash2, Loader2, QrCode, Clock, Upload, X } from "lucide-react";
 import { toast } from "sonner";
-import { formatDate } from "@/lib/format";
 
 type ShoeInput = {
   item_type: "Sepatu" | "Tas" | "Sandal";

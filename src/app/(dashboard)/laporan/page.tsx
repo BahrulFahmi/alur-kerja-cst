@@ -15,6 +15,8 @@ import {
   Tags,
   X,
   Calendar,
+  Trash2,
+  Pencil,
 } from "lucide-react";
 import Link from "next/link";
 import * as XLSX from "xlsx";
@@ -27,30 +29,43 @@ export default function ReportsPage() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [technicians, setTechnicians] = useState<any[]>([]);
   const [treatments, setTreatments] = useState<any[]>([]);
+  const [userRole, setUserRole] = useState("");
 
   const [search, setSearch] = useState("");
   const [dateStart, setDateStart] = useState("");
   const [dateEnd, setDateEnd] = useState("");
-
   const [filterPayment, setFilterPayment] = useState("all");
   const [filterPickup, setFilterPickup] = useState("all");
-
   const [activeTab, setActiveTab] = useState<"laporan" | "pelanggan">(
     "laporan",
   );
 
+  // State Modal Edit
+  const [editingOrder, setEditingOrder] = useState<any>(null);
+  const [editForm, setEditForm] = useState({
+    totalPrice: 0,
+    paymentStatus: "unpaid",
+    paymentMethod: "",
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // State Print
   const [printPreview, setPrintPreview] = useState<{
     isOpen: boolean;
     html: string;
   }>({ isOpen: false, html: "" });
-
   const [previewScale, setPreviewScale] = useState(0.6);
-
   const printRef = useRef<HTMLIFrameElement>(null);
-
   const closePreview = () => setPrintPreview({ isOpen: false, html: "" });
 
-  // ... (Bagian useEffect printPreviewScale tidak berubah, biarkan seperti aslinya) ...
+  // Ambil Role User
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((res) => res.json())
+      .then((data) => setUserRole(data.user?.role || ""));
+  }, []);
+
+  // Print Preview Scale
   useEffect(() => {
     if (!printPreview.isOpen) return;
     const PAPER_W = 794;
@@ -72,14 +87,13 @@ export default function ReportsPage() {
     };
   }, [printPreview.isOpen]);
 
+  // Fetch Data
   useEffect(() => {
     const fetchData = async () => {
       try {
         const res = await fetch("/api/laporan", { cache: "no-store" });
         if (!res.ok) throw new Error("Gagal memuat data");
         const data = await res.json();
-
-        // ✅ PERBAIKAN: Ambil dari data.rawData
         setRawData(data.rawData || []);
         setTreatments(data.treatments || []);
         setTechnicians(data.technicians || []);
@@ -94,21 +108,64 @@ export default function ReportsPage() {
     fetchData();
   }, []);
 
-  // ... (revenueStats dan todayStats sama persis seperti versi sebelumnya) ...
+  // Fungsi Hapus
+  const handleDelete = async (orderId: string) => {
+    if (!confirm("Yakin hapus transaksi ini? Data tidak bisa dikembalikan."))
+      return;
+    try {
+      const res = await fetch(`/api/laporan/${orderId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Gagal menghapus transaksi");
+      toast.success("Transaksi berhasil dihapus!");
+      window.location.reload();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  // Fungsi Buka Modal Edit
+  const handleEditClick = (order: any) => {
+    setEditingOrder(order);
+    setEditForm({
+      totalPrice: Number(order.totalPrice) || 0,
+      paymentStatus: order.paymentStatus || "unpaid",
+      paymentMethod: order.paymentMethod || "",
+    });
+  };
+
+  // Fungsi Simpan Edit
+  const handleSaveEdit = async () => {
+    if (!editingOrder) return;
+    setSavingEdit(true);
+    try {
+      const res = await fetch(`/api/laporan/${editingOrder.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editForm),
+      });
+      if (!res.ok) throw new Error("Gagal menyimpan perubahan");
+      toast.success("Transaksi berhasil diperbarui!");
+      setEditingOrder(null);
+      window.location.reload();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const revenueStats = useMemo(() => {
     const todayStr = new Date().toLocaleDateString("en-CA", {
       timeZone: "Asia/Jakarta",
     });
     const processedOrders = new Set();
-    let pendapatanCash = 0;
-    let pendapatanTransfer = 0;
-    let pendapatanHariIni = 0;
+    let pendapatanCash = 0,
+      pendapatanTransfer = 0,
+      pendapatanHariIni = 0;
 
     rawData.forEach((s) => {
       if (s.order?.paymentStatus !== "paid") return;
       const orderId = s.order.id;
       if (processedOrders.has(orderId)) return;
-
       const paymentDate = new Date(s.order.updatedAt || s.order.orderDate)
         .toISOString()
         .split("T")[0];
@@ -130,8 +187,8 @@ export default function ReportsPage() {
     let masukLunas = 0,
       masukBelumLunas = 0,
       keluarSudahBayar = 0,
-      keluarBayarHariIni = 0,
-      totalFisikSelesai = 0,
+      keluarBayarHariIni = 0;
+    let totalFisikSelesai = 0,
       totalFisikBelum = 0;
 
     rawData.forEach((s) => {
@@ -187,7 +244,6 @@ export default function ReportsPage() {
     };
   }, [rawData, revenueStats]);
 
-  // ... (techPerformance dan reportDataTreatment tetap sama) ...
   const techPerformance = useMemo(() => {
     const todayStr = new Date().toLocaleDateString("en-CA", {
       timeZone: "Asia/Jakarta",
@@ -220,20 +276,16 @@ export default function ReportsPage() {
         (shoe.customer?.name || "").toLowerCase().includes(keyword) ||
         (shoe.brand || "").toLowerCase().includes(keyword);
       if (!matchSearch) return false;
-
       const shoeDateStr = new Date(shoe.createdAt).toISOString().split("T")[0];
       if (dateStart && shoeDateStr < dateStart) return false;
       if (dateEnd && shoeDateStr > dateEnd) return false;
-
       if (filterPayment === "paid" && shoe.order?.paymentStatus !== "paid")
         return false;
       if (filterPayment === "unpaid" && shoe.order?.paymentStatus === "paid")
         return false;
-
       const isTaken = shoe.shoeStatus === "sudah_diambil";
       if (filterPickup === "taken" && !isTaken) return false;
       if (filterPickup === "not_taken" && isTaken) return false;
-
       return true;
     });
   }, [rawData, search, dateStart, dateEnd, filterPayment, filterPickup]);
@@ -522,7 +574,7 @@ export default function ReportsPage() {
         "Tgl Masuk": formatDate(s.createdAt),
         Pelanggan: s.customer?.name,
         Item: `${s.brand} - ${s.shoeType}`,
-        Teknisi: s.assignment?.[0]?.technician?.fullName || "-",
+        Teknisi: s.assignment?.[0]?.technicianName || "-",
         "Total Biaya": s.order?.totalPrice,
         "Status Pengerjaan": s.shoeStatus.replace(/_/g, " ").toUpperCase(),
         Pembayaran: s.order?.paymentStatus === "paid" ? "Lunas" : "Belum Lunas",
@@ -581,7 +633,7 @@ export default function ReportsPage() {
     );
 
   return (
-    <div className="max-w-full mx-auto space-y-4 pb-24 md:pb-10 px-2 md:px-0">
+    <div className="w-full max-w-full mx-auto space-y-4 pb-24 md:pb-10 px-2 md:px-0 overflow-x-hidden">
       <iframe ref={printRef} style={{ display: "none" }} title="print-frame" />
 
       {/* MODAL PREVIEW PRINT */}
@@ -607,13 +659,9 @@ export default function ReportsPage() {
                 <X className="w-4 h-4" />
               </button>
             </div>
-
             <div
               className="bg-white shadow-xl overflow-hidden rounded-sm"
-              style={{
-                width: 794 * previewScale,
-                height: 1123 * previewScale,
-              }}
+              style={{ width: 794 * previewScale, height: 1123 * previewScale }}
             >
               <iframe
                 srcDoc={printPreview.html.replace(
@@ -633,7 +681,6 @@ export default function ReportsPage() {
                 }}
               />
             </div>
-
             <div className="flex w-full gap-3">
               <button
                 onClick={closePreview}
@@ -648,6 +695,90 @@ export default function ReportsPage() {
                 <Printer className="w-4 h-4" /> Cetak
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EDIT TRANSAKSI */}
+      {editingOrder && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm p-6 space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-slate-700 pb-3">
+              <h2 className="font-bold text-lg text-accent">Edit Transaksi</h2>
+              <button
+                onClick={() => setEditingOrder(null)}
+                className="text-slate-500 hover:text-slate-300"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <p className="text-sm text-slate-300">
+              Nota:{" "}
+              <strong className="text-accent">
+                {editingOrder.invoiceNumber}
+              </strong>
+            </p>
+            <div>
+              <label className="text-xs text-slate-400 mb-1 block">
+                Total Tagihan (Rp)
+              </label>
+              <input
+                type="number"
+                className="neu-input w-full"
+                value={editForm.totalPrice}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    totalPrice: Number(e.target.value),
+                  })
+                }
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 mb-1 block">
+                Status Bayar
+              </label>
+              <select
+                className="neu-input w-full"
+                value={editForm.paymentStatus}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, paymentStatus: e.target.value })
+                }
+              >
+                <option value="unpaid">Belum Lunas</option>
+                <option value="paid">Lunas</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 mb-1 block">
+                Metode Bayar
+              </label>
+              <select
+                className="neu-input w-full"
+                value={editForm.paymentMethod}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, paymentMethod: e.target.value })
+                }
+              >
+                <option value="">-- Pilih Metode --</option>
+                <option value="Cash">Cash</option>
+                <option value="QR BCA">QR BCA</option>
+                <option value="QR BSI">QR BSI</option>
+                <option value="Bank BTN">Bank BTN</option>
+                <option value="Bank BSI">Bank BSI</option>
+              </select>
+            </div>
+            <button
+              onClick={handleSaveEdit}
+              disabled={savingEdit}
+              className="neu-btn-primary w-full py-3 mt-2 flex justify-center"
+            >
+              {savingEdit ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                "Simpan Perubahan"
+              )}
+            </button>
           </div>
         </div>
       )}
@@ -755,8 +886,8 @@ export default function ReportsPage() {
 
       {/* FILTER */}
       <div className="flex flex-col xl:flex-row gap-3 mt-2 w-full">
-        <div className="flex flex-col md:flex-row flex-1 gap-3">
-          <div className="relative w-full md:w-1/2">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-1 w-full">
+          <div className="relative w-full">
             <input
               type="text"
               placeholder="Cari nota, pelanggan..."
@@ -766,8 +897,7 @@ export default function ReportsPage() {
             />
             <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
           </div>
-
-          <div className="flex items-center gap-2 w-full md:w-1/2">
+          <div className="flex items-center gap-2 w-full">
             <input
               type="date"
               className="neu-input cursor-pointer py-3 md:py-2 w-full text-sm"
@@ -783,7 +913,6 @@ export default function ReportsPage() {
             />
           </div>
         </div>
-
         <div className="flex flex-col md:flex-row gap-3 w-full xl:w-auto">
           <select
             className="neu-input py-3 md:py-2 text-sm w-full md:w-[200px]"
@@ -794,7 +923,6 @@ export default function ReportsPage() {
             <option value="paid">Lunas</option>
             <option value="unpaid">Belum Lunas</option>
           </select>
-
           <select
             className="neu-input py-3 md:py-2 text-sm w-full md:w-[200px]"
             value={filterPickup}
@@ -809,7 +937,7 @@ export default function ReportsPage() {
 
       {/* TABEL LAPORAN */}
       {activeTab === "laporan" && (
-        <div className="neu-card !p-0 overflow-hidden">
+        <div className="neu-card !p-0 overflow-hidden w-full">
           <div className="overflow-x-auto w-full">
             <table className="w-full text-left border-collapse text-[11px] md:text-xs min-w-[1000px]">
               <thead className="bg-slate-800/80 text-slate-300">
@@ -870,7 +998,7 @@ export default function ReportsPage() {
                         {s.brand} - {s.shoeType}
                       </td>
                       <td className="px-3 py-2 font-medium text-slate-200">
-                        {s.assignment?.[0]?.technician?.fullName || "-"}
+                        {s.assignment?.[0]?.technicianName || "-"}
                       </td>
                       <td className="px-3 py-2 font-medium">
                         Rp{" "}
@@ -905,12 +1033,32 @@ export default function ReportsPage() {
                         )}
                       </td>
                       <td className="px-3 py-2 text-center">
-                        <Link
-                          href={`/transaksi/${s.order?.id}`}
-                          className="text-accent hover:text-accent-glow transition-colors inline-block"
-                        >
-                          <Eye className="w-4 h-4 mx-auto" />
-                        </Link>
+                        <div className="flex justify-center gap-2">
+                          <Link
+                            href={`/transaksi/${s.order?.id}`}
+                            className="text-accent hover:text-accent-glow transition-colors"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Link>
+                          {userRole === "owner" && (
+                            <>
+                              <button
+                                onClick={() => handleEditClick(s.order)}
+                                className="text-blue-400 hover:text-blue-300 transition-colors"
+                                title="Edit Transaksi"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(s.order?.id)}
+                                className="text-red-400 hover:text-red-300 transition-colors"
+                                title="Hapus Transaksi"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -924,7 +1072,7 @@ export default function ReportsPage() {
       {/* TABEL PELANGGAN */}
       {activeTab === "pelanggan" && (
         <div className="neu-card !p-0 overflow-hidden">
-          <div className="overflow-x-auto w-full">
+          <div className="w-full overflow-hidden">
             <table className="w-full text-left border-collapse text-[11px] md:text-xs min-w-[600px]">
               <thead className="bg-slate-800/80 text-slate-300">
                 <tr>

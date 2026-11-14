@@ -247,9 +247,9 @@ export default function CheckingPage() {
             setHtml5QrCode(null);
             await handleScan(decodedText);
           },
-          (_errorMessage) => {},
+          () => {},
         );
-      } catch (err: any) {
+      } catch {
         setCameraError("Gagal membuka kamera.");
       }
     };
@@ -373,13 +373,14 @@ export default function CheckingPage() {
             Pusat kendali operasional.
           </p>
         </div>
-
-        <button
-          onClick={startScanner}
-          className="neu-btn-primary w-full md:w-auto flex items-center justify-center gap-2 py-3 md:py-2"
-        >
-          <ScanLine className="w-5 h-5" /> Scan QR
-        </button>
+        {currentUser?.role === "technician" && (
+          <button
+            onClick={startScanner}
+            className="neu-btn-primary w-full md:w-auto flex items-center justify-center gap-2 py-3 md:py-2"
+          >
+            <ScanLine className="w-5 h-5" /> Scan QR
+          </button>
+        )}
       </div>
 
       {/* Tabs */}
@@ -546,54 +547,59 @@ export default function CheckingPage() {
                             <Eye className="w-4 h-4" />
                           </Link>
 
-                          {activeTab === "dikerjakan" && canUpdateStatus && (
-                            <div className="flex gap-1">
-                              {shoe.shoeStatus === "sedang_dikerjakan" && (
-                                <button
-                                  onClick={() =>
-                                    updateStatus(shoe.id, "proses_pencucian")
-                                  }
-                                  disabled={updatingId === shoe.id}
-                                  className="neu-btn !py-1 !px-2 text-[10px]"
-                                >
-                                  Mulai Cuci
-                                </button>
-                              )}
-                              {shoe.shoeStatus === "proses_pencucian" && (
-                                <button
-                                  onClick={() =>
-                                    updateStatus(shoe.id, "proses_pengeringan")
-                                  }
-                                  disabled={updatingId === shoe.id}
-                                  className="neu-btn !py-1 !px-2 text-[10px]"
-                                >
-                                  Selesai Cuci
-                                </button>
-                              )}
-                              {shoe.shoeStatus === "proses_pengeringan" && (
-                                <button
-                                  onClick={() =>
-                                    updateStatus(shoe.id, "proses_finishing")
-                                  }
-                                  disabled={updatingId === shoe.id}
-                                  className="neu-btn !py-1 !px-2 text-[10px]"
-                                >
-                                  Selesai Kering
-                                </button>
-                              )}
-                              {shoe.shoeStatus === "proses_finishing" && (
-                                <button
-                                  onClick={() =>
-                                    updateStatus(shoe.id, "selesai_dicuci")
-                                  }
-                                  disabled={updatingId === shoe.id}
-                                  className="neu-btn-primary !py-1 !px-2 text-[10px]"
-                                >
-                                  Selesai Finishing
-                                </button>
-                              )}
-                            </div>
-                          )}
+                          {activeTab === "dikerjakan" &&
+                            currentUser?.role === "technician" &&
+                            canUpdateStatus && (
+                              <div className="flex gap-1">
+                                {shoe.shoeStatus === "sedang_dikerjakan" && (
+                                  <button
+                                    onClick={() =>
+                                      updateStatus(shoe.id, "proses_pencucian")
+                                    }
+                                    disabled={updatingId === shoe.id}
+                                    className="neu-btn !py-1 !px-2 text-[10px]"
+                                  >
+                                    Mulai Cuci
+                                  </button>
+                                )}
+                                {shoe.shoeStatus === "proses_pencucian" && (
+                                  <button
+                                    onClick={() =>
+                                      updateStatus(
+                                        shoe.id,
+                                        "proses_pengeringan",
+                                      )
+                                    }
+                                    disabled={updatingId === shoe.id}
+                                    className="neu-btn !py-1 !px-2 text-[10px]"
+                                  >
+                                    Selesai Cuci
+                                  </button>
+                                )}
+                                {shoe.shoeStatus === "proses_pengeringan" && (
+                                  <button
+                                    onClick={() =>
+                                      updateStatus(shoe.id, "proses_finishing")
+                                    }
+                                    disabled={updatingId === shoe.id}
+                                    className="neu-btn !py-1 !px-2 text-[10px]"
+                                  >
+                                    Selesai Kering
+                                  </button>
+                                )}
+                                {shoe.shoeStatus === "proses_finishing" && (
+                                  <button
+                                    onClick={() =>
+                                      updateStatus(shoe.id, "selesai_dicuci")
+                                    }
+                                    disabled={updatingId === shoe.id}
+                                    className="neu-btn-primary !py-1 !px-2 text-[10px]"
+                                  >
+                                    Selesai Finishing
+                                  </button>
+                                )}
+                              </div>
+                            )}
 
                           {activeTab === "selesai" && isCashierOrAdmin && (
                             <button
@@ -605,28 +611,29 @@ export default function CheckingPage() {
                             </button>
                           )}
 
-                          {activeTab === "siap_diambil" && isCashierOrAdmin && (
-                            <div className="flex gap-1">
-                              {shoe.order?.paymentStatus !== "paid" && (
+                          {activeTab === "selesai" &&
+                            currentUser?.role === "cashier" && (
+                              <div className="flex gap-1">
+                                {shoe.order?.paymentStatus !== "paid" && (
+                                  <button
+                                    onClick={() => setPayingOrder(shoe)}
+                                    className="neu-btn !py-1 !px-3 text-xs border-red-500/50 text-red-400 hover:bg-red-500/10"
+                                  >
+                                    Bayar
+                                  </button>
+                                )}
                                 <button
-                                  onClick={() => setPayingOrder(shoe)}
-                                  className="neu-btn !py-1 !px-3 text-xs border-red-500/50 text-red-400 hover:bg-red-500/10"
+                                  onClick={() => handleHandover(shoe)}
+                                  disabled={
+                                    updatingId === shoe.id ||
+                                    shoe.order?.paymentStatus !== "paid"
+                                  }
+                                  className={`neu-btn-primary !py-1 !px-3 text-xs ${shoe.order?.paymentStatus !== "paid" ? "opacity-30 cursor-not-allowed" : ""}`}
                                 >
-                                  Bayar
+                                  Serahkan
                                 </button>
-                              )}
-                              <button
-                                onClick={() => handleHandover(shoe)}
-                                disabled={
-                                  updatingId === shoe.id ||
-                                  shoe.order?.paymentStatus !== "paid"
-                                }
-                                className={`neu-btn-primary !py-1 !px-3 text-xs ${shoe.order?.paymentStatus !== "paid" ? "opacity-30 cursor-not-allowed" : ""}`}
-                              >
-                                Serahkan
-                              </button>
-                            </div>
-                          )}
+                              </div>
+                            )}
                         </div>
                       </td>
                     </tr>

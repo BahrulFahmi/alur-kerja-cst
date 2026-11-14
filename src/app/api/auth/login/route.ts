@@ -13,28 +13,46 @@ export async function POST(req: Request) {
     const email = body.email?.trim().toLowerCase();
     const password = body.password?.trim();
 
+    // 1. Cek apakah email ditemukan
     const [user] = await db
       .select()
       .from(profiles)
       .where(eq(profiles.email, email))
       .limit(1);
 
-    if (!user || !user.passwordHash) {
+    if (!user) {
       return NextResponse.json(
-        { error: "Email atau password salah" },
+        {
+          error: `DEBUG: Email "${email}" tidak ditemukan di database.`,
+        },
         { status: 401 },
       );
     }
 
+    // 2. Cek apakah hash ada
+    if (!user.passwordHash) {
+      return NextResponse.json(
+        {
+          error: `DEBUG: User ditemukan, tapi hash password kosong.`,
+        },
+        { status: 401 },
+      );
+    }
+
+    // 3. Cek password
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
 
     if (!isPasswordValid) {
       return NextResponse.json(
-        { error: "Email atau password salah" },
+        {
+          error: `DEBUG: Password salah untuk email ${email}.`,
+          hashDiDatabase: user.passwordHash,
+        },
         { status: 401 },
       );
     }
 
+    // 4. Jika lolos, buat token
     const token = await createToken({
       id: user.id as string,
       role: user.role as string,
@@ -55,9 +73,8 @@ export async function POST(req: Request) {
 
     return response;
   } catch (error: any) {
-    console.error("Login Error:", error);
     return NextResponse.json(
-      { error: "Terjadi kesalahan server" },
+      { error: `DEBUG Error: ${error.message}` },
       { status: 500 },
     );
   }

@@ -7,16 +7,6 @@ import { eq } from "drizzle-orm";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
 
-// 1. Daftar hak akses URL
-const PAGE_ACCESS: Record<string, string[]> = {
-  "/dashboard": ["admin", "cashier"],
-  "/transaksi": ["admin", "cashier"],
-  "/treatments": ["admin"],
-  "/laporan": ["admin", "cashier"],
-  "/info-kerja": ["admin", "cashier", "technician"],
-  "/info-kerja/my-jobs": ["admin", "technician"],
-};
-
 export default async function DashboardLayout({
   children,
 }: {

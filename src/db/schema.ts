@@ -31,6 +31,7 @@ export const treatments = pgTable("treatments", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   description: text("description"),
+  category: text("category").default("Lain-lain"),
   price: numeric("price").notNull(),
   durationMinDays: integer("duration_min_days").default(1),
   durationMaxDays: integer("duration_max_days").default(1),
@@ -131,3 +132,5 @@ export const activityLogs = pgTable("activity_logs", {
   relatedTransactionId: text("related_transaction_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
+
+export * from "./modules";

@@ -1,7 +1,24 @@
 "use client";
-import { useState, useEffect } from "react";
-import { Loader2, Plus, Tag, X, Clock } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import {
+  Loader2,
+  Plus,
+  Tag,
+  X,
+  Clock,
+  CheckCircle2,
+  XCircle,
+} from "lucide-react";
 import { toast } from "sonner";
+
+const CATEGORIES = [
+  "Semua",
+  "Deep Clean",
+  "Fast Clean",
+  "Reglue",
+  "Repaint",
+  "Lain-lain",
+];
 
 export default function TreatmentsPage() {
   const [activeTab, setActiveTab] = useState<"treatments" | "promos">(
@@ -12,6 +29,9 @@ export default function TreatmentsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  // State Filter Kategori (default: "Semua")
+  const [filterCategory, setFilterCategory] = useState("Semua");
+
   // State Modal
   const [showTreatmentModal, setShowTreatmentModal] = useState(false);
   const [showPromoModal, setShowPromoModal] = useState(false);
@@ -20,6 +40,7 @@ export default function TreatmentsPage() {
   const [formTreatment, setFormTreatment] = useState({
     name: "",
     description: "",
+    category: "",
     price: 0,
     durationMinDays: 1,
     durationMaxDays: 1,
@@ -42,25 +63,20 @@ export default function TreatmentsPage() {
     setLoading(true);
     try {
       const res = await fetch("/api/treatments", { cache: "no-store" });
-
-      const text = await res.text(); // Baca sebagai teks dulu
+      const text = await res.text();
       let data;
 
       try {
-        data = JSON.parse(text); // Coba jadikan JSON
-      } catch (e) {
-        console.error("Server membalas dengan HTML, bukan JSON:", text);
-        throw new Error("Kesalahan server internal. Cek terminal VS Code.");
+        data = JSON.parse(text);
+      } catch {
+        throw new Error("Kesalahan server internal.");
       }
 
-      if (!res.ok) {
-        throw new Error(data.error || "Gagal memuat data");
-      }
+      if (!res.ok) throw new Error(data.error || "Gagal memuat data");
 
       setTreatments(data.treatments || []);
       setPromos(data.promotions || []);
     } catch (err: any) {
-      console.error(err);
       toast.error(err.message);
     } finally {
       setLoading(false);
@@ -80,7 +96,6 @@ export default function TreatmentsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "treatment", ...formTreatment }),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Gagal menyimpan treatment");
 
@@ -89,6 +104,7 @@ export default function TreatmentsPage() {
       setFormTreatment({
         name: "",
         description: "",
+        category: "",
         price: 0,
         durationMinDays: 1,
         durationMaxDays: 1,
@@ -111,7 +127,6 @@ export default function TreatmentsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "promo", ...formPromo }),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Gagal menyimpan promo");
 
@@ -129,7 +144,6 @@ export default function TreatmentsPage() {
       });
       fetchData();
     } catch (err: any) {
-      console.error(err);
       toast.error(err.message);
     } finally {
       setSaving(false);
@@ -141,11 +155,7 @@ export default function TreatmentsPage() {
       const res = await fetch("/api/treatments", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "treatment",
-          id,
-          isActive: !current,
-        }),
+        body: JSON.stringify({ type: "treatment", id, isActive: !current }),
       });
       if (!res.ok) throw new Error("Gagal update status");
       toast.success("Status treatment diubah.");
@@ -160,11 +170,7 @@ export default function TreatmentsPage() {
       const res = await fetch("/api/treatments", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "promo",
-          id,
-          isActive: !current,
-        }),
+        body: JSON.stringify({ type: "promo", id, isActive: !current }),
       });
       if (!res.ok) throw new Error("Gagal update status");
       toast.success("Status promo diubah.");
@@ -173,6 +179,13 @@ export default function TreatmentsPage() {
       toast.error(err.message);
     }
   };
+
+  // Filter data berdasarkan kategori
+  const filteredTreatments = useMemo(() => {
+    return treatments.filter(
+      (t) => filterCategory === "Semua" || t.category === filterCategory,
+    );
+  }, [treatments, filterCategory]);
 
   if (loading)
     return (
@@ -183,6 +196,7 @@ export default function TreatmentsPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-10 relative">
+      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between md:items-end gap-4">
         <div>
           <h1 className="text-2xl font-bold">Layanan & Promo</h1>
@@ -203,7 +217,7 @@ export default function TreatmentsPage() {
         </button>
       </div>
 
-      {/* Tabs */}
+      {/* TABS */}
       <div className="flex bg-slate-900 p-1 rounded-xl shadow-neu-in w-full md:w-1/2">
         <button
           onClick={() => setActiveTab("treatments")}
@@ -219,15 +233,37 @@ export default function TreatmentsPage() {
         </button>
       </div>
 
-      {/* Tabel Treatment */}
+      {/* FILTER KATEGORI (BERBENTUK TOMBOL) */}
+      {activeTab === "treatments" && (
+        <div className="flex flex-wrap gap-2 w-full">
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setFilterCategory(cat)}
+              className={`px-4 py-2 rounded-xl text-xs md:text-sm font-medium transition-all ${
+                filterCategory === cat
+                  ? "bg-slate-800 text-accent shadow-inner"
+                  : "text-slate-400 bg-slate-900 border border-slate-800 hover:bg-slate-800/50"
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* TABEL TREATMENT */}
       {activeTab === "treatments" && (
         <div className="neu-card !p-0 overflow-hidden">
           <div className="overflow-x-auto w-full">
-            <table className="w-full text-left border-collapse text-sm min-w-[700px]">
+            <table className="w-full text-left border-collapse text-sm min-w-[800px]">
               <thead className="bg-slate-800/80 text-slate-300">
                 <tr>
                   <th className="p-4 font-semibold border-b border-slate-700">
                     Nama Treatment
+                  </th>
+                  <th className="p-4 font-semibold border-b border-slate-700">
+                    Kategori
                   </th>
                   <th className="p-4 font-semibold border-b border-slate-700">
                     Durasi (Hari)
@@ -244,49 +280,88 @@ export default function TreatmentsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/50">
-                {treatments.map((t) => (
-                  <tr key={t.id} className="hover:bg-slate-800/30">
-                    <td className="p-4 font-semibold text-accent">
-                      {t.name}
-                      <p className="text-xs text-slate-500 font-normal">
-                        {t.description}
-                      </p>
-                    </td>
-                    <td className="p-4">
-                      <div className="flex items-center gap-1 text-slate-300">
-                        <Clock className="w-3 h-3 text-slate-500" />
-                        {t.durationMinDays === t.durationMaxDays
-                          ? `${t.durationMaxDays} Hari`
-                          : `${t.durationMinDays} - ${t.durationMaxDays} Hari`}
-                      </div>
-                    </td>
-                    <td className="p-4 font-medium">
-                      Rp {Number(t.price).toLocaleString("id-ID")}
-                    </td>
-                    <td className="p-4 text-center">
-                      <span
-                        className={`neu-badge text-[10px] uppercase ${t.isActive ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}
-                      >
-                        {t.isActive ? "Aktif" : "Nonaktif"}
-                      </span>
-                    </td>
-                    <td className="p-4 text-center">
-                      <button
-                        onClick={() => toggleTreatmentStatus(t.id, t.isActive)}
-                        className="text-sm text-accent hover:underline"
-                      >
-                        {t.isActive ? "Nonaktifkan" : "Aktifkan"}
-                      </button>
+                {filteredTreatments.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-slate-500">
+                      Tidak ada treatment di kategori ini.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredTreatments.map((t) => (
+                    <tr key={t.id} className="hover:bg-slate-800/30">
+                      <td className="p-4 font-semibold text-accent">
+                        {t.name}
+                        <p className="text-xs text-slate-500 font-normal">
+                          {t.description}
+                        </p>
+                      </td>
+                      <td className="p-4">
+                        <span className="neu-badge bg-slate-800 text-[10px] uppercase text-slate-300">
+                          {t.category || "Lain-lain"}
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex items-center gap-1 text-slate-300">
+                          <Clock className="w-3 h-3 text-slate-500" />
+                          {t.durationMinDays === t.durationMaxDays
+                            ? `${t.durationMaxDays} Hari`
+                            : `${t.durationMinDays} - ${t.durationMaxDays} Hari`}
+                        </div>
+                      </td>
+                      <td className="p-4 font-medium">
+                        Rp {Number(t.price).toLocaleString("id-ID")}
+                      </td>
+                      <td className="p-4 text-center">
+                        <span
+                          className={`neu-badge text-[10px] uppercase ${t.isActive ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}
+                        >
+                          {t.isActive ? "Aktif" : "Nonaktif"}
+                        </span>
+                      </td>
+                      <td className="p-4 text-center">
+                        <div className="flex items-center justify-center bg-slate-900 p-1 rounded-xl w-max mx-auto border border-slate-700">
+                          {/* Tombol Aktif */}
+                          <button
+                            onClick={() => {
+                              if (!t.isActive)
+                                toggleTreatmentStatus(t.id, false);
+                            }}
+                            disabled={t.isActive}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                              t.isActive
+                                ? "bg-green-500/20 text-green-400 shadow-inner"
+                                : "text-slate-500 hover:text-slate-300"
+                            }`}
+                          >
+                            <CheckCircle2 className="w-3 h-3" /> Aktif
+                          </button>
+
+                          {/* Tombol Nonaktif */}
+                          <button
+                            onClick={() => {
+                              if (t.isActive) toggleTreatmentStatus(t.id, true);
+                            }}
+                            disabled={!t.isActive}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                              !t.isActive
+                                ? "bg-red-500/20 text-red-400 shadow-inner"
+                                : "text-slate-500 hover:text-slate-300"
+                            }`}
+                          >
+                            <XCircle className="w-3 h-3" /> Nonaktif
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* Tabel Promo */}
+      {/* TABEL PROMO */}
       {activeTab === "promos" && (
         <div className="neu-card !p-0 overflow-hidden">
           <div className="overflow-x-auto w-full">
@@ -357,7 +432,7 @@ export default function TreatmentsPage() {
         </div>
       )}
 
-      {/* --- MODAL TAMBAH TREATMENT --- */}
+      {/* MODAL TAMBAH TREATMENT */}
       {showTreatmentModal && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-5 md:p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -373,6 +448,29 @@ export default function TreatmentsPage() {
               </button>
             </div>
             <form onSubmit={handleAddTreatment} className="space-y-3">
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">
+                  Kategori
+                </label>
+                <select
+                  className="neu-input"
+                  value={formTreatment.category}
+                  onChange={(e) =>
+                    setFormTreatment({
+                      ...formTreatment,
+                      category: e.target.value,
+                    })
+                  }
+                  required
+                >
+                  <option value="">-- Pilih Kategori --</option>
+                  <option value="Deep Clean">Deep Clean</option>
+                  <option value="Fast Clean">Fast Clean</option>
+                  <option value="Reglue">Reglue</option>
+                  <option value="Repaint">Repaint</option>
+                  <option value="Lain-lain">Lain-lain</option>
+                </select>
+              </div>
               <input
                 required
                 placeholder="Nama Treatment"
@@ -393,7 +491,6 @@ export default function TreatmentsPage() {
                   })
                 }
               />
-
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">
                   Harga (Rp)
@@ -411,7 +508,6 @@ export default function TreatmentsPage() {
                   }
                 />
               </div>
-
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-slate-400 mb-1 block">
@@ -450,7 +546,6 @@ export default function TreatmentsPage() {
                   />
                 </div>
               </div>
-
               <div className="flex items-center gap-2 mt-2">
                 <input
                   type="checkbox"
@@ -483,7 +578,7 @@ export default function TreatmentsPage() {
         </div>
       )}
 
-      {/* --- MODAL TAMBAH PROMO --- */}
+      {/* MODAL TAMBAH PROMO */}
       {showPromoModal && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -508,7 +603,6 @@ export default function TreatmentsPage() {
                   setFormPromo({ ...formPromo, name: e.target.value })
                 }
               />
-
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-slate-400 mb-1 block">
@@ -546,8 +640,6 @@ export default function TreatmentsPage() {
                   />
                 </div>
               </div>
-
-              {/* TARGET POTONGAN */}
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">
                   Target Potongan Diskon
@@ -566,7 +658,6 @@ export default function TreatmentsPage() {
                   <option value="single">Hanya 1 Item (Item Terakhir)</option>
                 </select>
               </div>
-
               <div className="flex items-center gap-2 mt-2">
                 <input
                   type="checkbox"

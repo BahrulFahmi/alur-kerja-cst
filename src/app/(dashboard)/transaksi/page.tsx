@@ -491,7 +491,7 @@ export default function NewOrderPage() {
       <button
         type="submit"
         disabled={loading}
-        className="neu-btn-primary w-full flex justify-center items-center gap-2 py-4 text-sm md:text-base sticky bottom-20 md:static md:bottom-auto shadow-2xl"
+        className="neu-btn-primary w-full flex justify-center items-center gap-2 py-4 text-sm md:text-base shadow-2xl"
       >
         {loading ? (
           <Loader2 className="w-5 h-5 animate-spin" />
