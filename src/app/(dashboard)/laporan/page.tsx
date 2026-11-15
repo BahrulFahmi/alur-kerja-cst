@@ -46,6 +46,9 @@ export default function ReportsPage() {
     totalPrice: 0,
     paymentStatus: "unpaid",
     paymentMethod: "",
+    promoNotes: "",
+    shoeId: "",
+    treatmentId: "",
   });
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -94,8 +97,9 @@ export default function ReportsPage() {
         const res = await fetch("/api/laporan", { cache: "no-store" });
         if (!res.ok) throw new Error("Gagal memuat data");
         const data = await res.json();
+
         setRawData(data.rawData || []);
-        setTreatments(data.treatments || []);
+        setTreatments(data.treatments || []); // <-- Pastikan ini ada
         setTechnicians(data.technicians || []);
         setCustomers(data.customers || []);
       } catch (error) {
@@ -123,24 +127,40 @@ export default function ReportsPage() {
   };
 
   // Fungsi Buka Modal Edit
-  const handleEditClick = (order: any) => {
-    setEditingOrder(order);
+  const handleEditClick = (order: any, shoe: any) => {
+    const currentTreatment = treatments.find(
+      (t) => t.name === shoe.treatment?.name,
+    );
+
+    setEditingOrder({ order, shoe });
     setEditForm({
       totalPrice: Number(order.totalPrice) || 0,
       paymentStatus: order.paymentStatus || "unpaid",
       paymentMethod: order.paymentMethod || "",
+      promoNotes: order.promoNotes || "",
+      shoeId: shoe?.id || "",
+      // Isi treatmentId dengan treatment yang sedang aktif, atau kosong jika tidak ditemukan
+      treatmentId: currentTreatment?.id || shoe?.treatmentId || "",
     });
   };
 
   // Fungsi Simpan Edit
   const handleSaveEdit = async () => {
     if (!editingOrder) return;
+    if (editForm.paymentStatus === "paid" && !editForm.paymentMethod) {
+      return toast.error("Metode pembayaran wajib dipilih.");
+    }
+
     setSavingEdit(true);
     try {
-      const res = await fetch(`/api/laporan/${editingOrder.id}`, {
+      const res = await fetch(`/api/laporan/${editingOrder.order.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editForm),
+        body: JSON.stringify({
+          ...editForm,
+          shoeId: editingOrder.shoe?.id,
+          treatmentId: editForm.treatmentId,
+        }),
       });
       if (!res.ok) throw new Error("Gagal menyimpan perubahan");
       toast.success("Transaksi berhasil diperbarui!");
@@ -715,9 +735,48 @@ export default function ReportsPage() {
             <p className="text-sm text-slate-300">
               Nota:{" "}
               <strong className="text-accent">
-                {editingOrder.invoiceNumber}
+                {editingOrder.order.invoiceNumber}
               </strong>
             </p>
+
+            {/* Treatment */}
+            <div>
+              <label className="text-xs text-slate-400 mb-1 block">
+                Treatment
+              </label>
+              <select
+                className="neu-input w-full"
+                value={editForm.treatmentId}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, treatmentId: e.target.value })
+                }
+              >
+                <option value="">-- Pilih Treatment --</option>
+                {treatments.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} - Rp {Number(t.price).toLocaleString("id-ID")}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Promo */}
+            <div>
+              <label className="text-xs text-slate-400 mb-1 block">
+                Promo (Opsional)
+              </label>
+              <input
+                type="text"
+                className="neu-input w-full"
+                placeholder="cth: Diskon 10%"
+                value={editForm.promoNotes}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, promoNotes: e.target.value })
+                }
+              />
+            </div>
+
+            {/* Total */}
             <div>
               <label className="text-xs text-slate-400 mb-1 block">
                 Total Tagihan (Rp)
@@ -734,6 +793,8 @@ export default function ReportsPage() {
                 }
               />
             </div>
+
+            {/* Status Bayar */}
             <div>
               <label className="text-xs text-slate-400 mb-1 block">
                 Status Bayar
@@ -741,37 +802,51 @@ export default function ReportsPage() {
               <select
                 className="neu-input w-full"
                 value={editForm.paymentStatus}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, paymentStatus: e.target.value })
-                }
+                onChange={(e) => {
+                  const status = e.target.value;
+                  setEditForm({
+                    ...editForm,
+                    paymentStatus: status,
+                    paymentMethod:
+                      status === "unpaid" ? "" : editForm.paymentMethod,
+                  });
+                }}
               >
                 <option value="unpaid">Belum Lunas</option>
                 <option value="paid">Lunas</option>
               </select>
             </div>
-            <div>
-              <label className="text-xs text-slate-400 mb-1 block">
-                Metode Bayar
-              </label>
-              <select
-                className="neu-input w-full"
-                value={editForm.paymentMethod}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, paymentMethod: e.target.value })
-                }
-              >
-                <option value="">-- Pilih Metode --</option>
-                <option value="Cash">Cash</option>
-                <option value="QR BCA">QR BCA</option>
-                <option value="QR BSI">QR BSI</option>
-                <option value="Bank BTN">Bank BTN</option>
-                <option value="Bank BSI">Bank BSI</option>
-              </select>
-            </div>
+
+            {/* Metode Bayar (Hanya muncul jika Lunas) */}
+            {editForm.paymentStatus === "paid" && (
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">
+                  Metode Bayar (Wajib)
+                </label>
+                <select
+                  className="neu-input w-full"
+                  value={editForm.paymentMethod}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, paymentMethod: e.target.value })
+                  }
+                >
+                  <option value="">-- Pilih Metode --</option>
+                  <option value="Cash">Cash</option>
+                  <option value="QR BCA">QR BCA</option>
+                  <option value="QR BSI">QR BSI</option>
+                  <option value="Bank BTN">Bank BTN</option>
+                  <option value="Bank BSI">Bank BSI</option>
+                </select>
+              </div>
+            )}
+
             <button
               onClick={handleSaveEdit}
-              disabled={savingEdit}
-              className="neu-btn-primary w-full py-3 mt-2 flex justify-center"
+              disabled={
+                savingEdit ||
+                (editForm.paymentStatus === "paid" && !editForm.paymentMethod)
+              }
+              className="neu-btn-primary w-full py-3 mt-2 flex justify-center disabled:opacity-50"
             >
               {savingEdit ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
@@ -1043,7 +1118,7 @@ export default function ReportsPage() {
                           {userRole === "owner" && (
                             <>
                               <button
-                                onClick={() => handleEditClick(s.order)}
+                                onClick={() => handleEditClick(s.order, s)}
                                 className="text-blue-400 hover:text-blue-300 transition-colors"
                                 title="Edit Transaksi"
                               >

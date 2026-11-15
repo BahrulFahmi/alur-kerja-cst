@@ -50,9 +50,6 @@ export default function MyJobsPage() {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  // PERBAIKAN: Deklarasi state yang benar
-  const [currentUser, setCurrentUser] = useState<any>(null);
-
   const fetchJobs = async () => {
     try {
       setLoading(true);
@@ -66,7 +63,6 @@ export default function MyJobsPage() {
         setLoading(false);
         return;
       }
-      setCurrentUser(meData.user);
 
       // 2. Ambil Pekerjaan
       const res = await fetch(`/api/my-jobs?userId=${meData.user.id}`, {

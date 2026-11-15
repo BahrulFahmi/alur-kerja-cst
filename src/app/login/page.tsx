@@ -30,11 +30,16 @@ export default function LoginPage() {
       toast.success("Login berhasil!");
 
       // ARAHKAN SESUAI ROLE
-      if (data.user?.role === "technician") {
-        window.location.href = "/info-kerja"; // Teknisi langsung ke Monitoring
+      const userRole = data.user?.role;
+
+      if (userRole === "technician") {
+        router.push("/info-kerja");
       } else {
-        window.location.href = "/dashboard"; // Admin, Kasir, Owner ke Dashboard
+        router.push("/dashboard");
       }
+
+      // Paksa refresh agar cookie session langsung terbaca oleh Layout Server
+      router.refresh();
     } catch (err: any) {
       toast.error(err.message);
       setLoading(false); // Hentikan loading hanya jika gagal

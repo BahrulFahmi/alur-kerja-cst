@@ -233,10 +233,6 @@ export default function OrderDetail({
 
       await printer.connect();
 
-      // 1. Inisialisasi printer sekali di awal
-      printer.initialize();
-
-      // 2. Cetak semua label secara berurutan tanpa memotong kertas
       for (const shoe of order.shoes) {
         const itemType = shoe.shoeType?.split(" - ")[0] || "Sepatu";
         const itemModel = shoe.shoeType?.split(" - ")[1] || "";
@@ -252,29 +248,35 @@ export default function OrderDetail({
             : rupiah(shoe.treatmentPrice);
 
         printer
+          .initialize()
+          // Header
           .line("CHAT SHOE TREATMENT", { align: Align.Center, bold: true })
           .line(order.invoiceNumber, { align: Align.Center })
           .line("--------------------------------")
+
+          // QR Code
           .printQRCode({
             data: shoe.qrCode,
             size: 6,
             align: Align.Center,
           })
           .line("--------------------------------")
-          .line(`${title} | ${shoe.treatment?.name || "-"}`)
-          .line(`Pelanggan: ${order.customer?.name} | Kode: ${shoe.shoeCode}`)
-          .line(
-            `Harga: ${price} | Estimasi: ${calculateMaxEstimatedDate(order)}`,
-          )
+
+          // Detail Sepatu (TANPA TANDA |)
+          .line(title, { bold: true })
+          .line(`Treatment: ${shoe.treatment?.name || "-"}`)
+          .line(`Pelanggan: ${order.customer?.name || "-"}`)
+          .line(`Kode: ${shoe.shoeCode}`)
+          .line(`Harga: ${price}`)
+          .line(`Estimasi: ${calculateMaxEstimatedDate(order)}`)
+
+          // Footer
           .line("--------------------------------")
-          .line("") // Jarak antar label
-          .line("");
+          .cutPaper()
+          .execute();
       }
 
-      // 3. Potong kertas HANYA sekali di akhir setelah semua label tercetak
-      printer.cutPaper().execute();
-
-      toast.success("Semua label berhasil dikirim ke printer!");
+      toast.success("Label berhasil dikirim ke printer!");
       setShowPreview(null);
     } catch (err: any) {
       console.error(err);
@@ -501,7 +503,7 @@ export default function OrderDetail({
               {/* PREVIEW LABEL (PER SEPATU) */}
               {showPreview === "label" && (
                 <div className="space-y-4">
-                  {order.shoes?.map((shoe: any) => {
+                  {order.shoes.map((shoe: any) => {
                     const itemType = shoe.shoeType?.split(" - ")[0] || "Sepatu";
                     const itemModel = shoe.shoeType?.split(" - ")[1] || "";
                     const title = [
@@ -514,6 +516,7 @@ export default function OrderDetail({
                       Number(shoe.treatmentPrice) === 0
                         ? "FREE"
                         : rupiah(shoe.treatmentPrice);
+
                     return (
                       <div
                         key={shoe.id}
@@ -530,12 +533,10 @@ export default function OrderDetail({
                         </div>
                         <div className="font-bold">{title}</div>
                         <div>Treatment: {shoe.treatment?.name || "-"}</div>
-                        <div>Pelanggan: {order.customer?.name}</div>
+                        <div>Pelanggan: {order.customer?.name || "-"}</div>
                         <div>Kode: {shoe.shoeCode}</div>
-                        <div className="font-bold mt-1">Harga: {price}</div>
-                        <div className="text-center mt-1">
-                          Estimasi: {calculateMaxEstimatedDate(order)}
-                        </div>
+                        <div className="font-bold">Harga: {price}</div>
+                        <div>Estimasi: {calculateMaxEstimatedDate(order)}</div>
                       </div>
                     );
                   })}

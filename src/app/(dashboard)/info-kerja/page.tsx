@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Loader2,
   Search,
@@ -138,14 +138,15 @@ export default function CheckingPage() {
 
       if (!matchSearch) return false;
 
+      // Logika Overdue Baru
       const createdDate = new Date(s.createdAt);
-      const diffDays = Math.ceil(
-        Math.abs(now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24),
-      );
-      const isOverdue = diffDays > 3 && s.shoeStatus !== "sudah_diambil";
+      const maxDays = s.treatment?.durationMaxDays || 1;
+      const deadline = new Date(createdDate);
+      deadline.setDate(deadline.getDate() + maxDays + 1);
+      const isOverdue = now > deadline && s.shoeStatus !== "sudah_diambil";
 
+      if (activeTab === "overdue") return isOverdue;
       if ((activeTab as string) === "overdue") return isOverdue;
-      if (isOverdue && activeTab !== "overdue") return false;
 
       if (activeTab === "belum") return s.shoeStatus === "menunggu_pengerjaan";
       if (activeTab === "dikerjakan")
@@ -166,10 +167,10 @@ export default function CheckingPage() {
     const now = new Date();
     return shoes.filter((s) => {
       const createdDate = new Date(s.createdAt);
-      const diffDays = Math.ceil(
-        Math.abs(now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24),
-      );
-      const isOverdue = diffDays > 3 && s.shoeStatus !== "sudah_diambil";
+      const maxDays = s.treatment?.durationMaxDays || 1;
+      const deadline = new Date(createdDate);
+      deadline.setDate(deadline.getDate() + maxDays + 1);
+      const isOverdue = now > deadline && s.shoeStatus !== "sudah_diambil";
 
       if (tab === "overdue") return isOverdue;
       if (isOverdue) return false;
@@ -201,7 +202,7 @@ export default function CheckingPage() {
         if (html5QrCode.isScanning) {
           await html5QrCode.stop();
         }
-      } catch (e) {
+      } catch {
         // Abaikan error jika scanner sudah berhenti
       }
       setHtml5QrCode(null);
@@ -249,7 +250,7 @@ export default function CheckingPage() {
           },
           () => {},
         );
-      } catch (err: any) {
+      } catch {
         setCameraError("Gagal membuka kamera.");
       }
     };
