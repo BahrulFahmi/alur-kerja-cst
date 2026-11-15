@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
-// IMPORT LIBRARY WEB THERMAL PRINTER
 import {
   WebThermalPrinter,
   ConnectionMode,
