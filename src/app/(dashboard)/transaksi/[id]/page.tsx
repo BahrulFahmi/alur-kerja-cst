@@ -22,6 +22,17 @@ import {
   Align,
 } from "@quan-erp/web-thermal-printer";
 
+// Helper untuk membuat objek teks
+const t = (text: string, opts: { align?: Align; bold?: boolean } = {}) => ({
+  text,
+  align: opts.align,
+  style: opts.bold ? { bold: true } : undefined,
+  forceNewLine: true,
+});
+
+// Garis pemisah
+const LINE = "--------------------------------";
+
 export default function OrderDetail({
   params,
 }: {
@@ -105,7 +116,7 @@ export default function OrderDetail({
         0,
       );
 
-      // 3. Update total harga order via API (Anda harus memastikan route ini ada)
+      // 3. Update total harga order via API
       await fetch(`/api/transaksi/${order.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -132,7 +143,7 @@ export default function OrderDetail({
 
   const rupiah = (n: number) => `Rp${Number(n || 0).toLocaleString("id-ID")}`;
 
-  // --- FUNGSI CETAK STRUK (DIPADATKAN) ---
+  // --- CETAK STRUK ---
   const executePrintReceipt = async () => {
     if (typeof navigator === "undefined" || !(navigator as any).bluetooth) {
       toast.error(
@@ -149,21 +160,18 @@ export default function OrderDetail({
 
       await printer.connect();
 
-      // Header
       printer
         .initialize()
-        .line("CHAT SHOE TREATMENT", { align: Align.Center, bold: true })
-        .line("--------------------------------");
+        .printText(
+          t("CHAT SHOE TREATMENT", { align: Align.Center, bold: true }),
+        )
+        .printText(t(LINE))
+        .printText(t(`No. Nota : ${order.invoiceNumber}`))
+        .printText(t(`Tanggal  : ${formatDate(order.createdAt)}`))
+        .printText(t(`Pelanggan: ${order.customer?.name}`))
+        .printText(t(`Estimasi : ${calculateMaxEstimatedDate(order)}`))
+        .printText(t(LINE));
 
-      // Info Transaksi
-      printer
-        .line(`No. Nota : ${order.invoiceNumber}`)
-        .line(`Tanggal  : ${formatDate(order.createdAt)}`)
-        .line(`Pelanggan: ${order.customer?.name}`)
-        .line(`Estimasi : ${calculateMaxEstimatedDate(order)}`)
-        .line("--------------------------------");
-
-      // Daftar Item (Rapat)
       order.shoes.forEach((shoe: any) => {
         const itemType = shoe.shoeType?.split(" - ")[0] || "Sepatu";
         const itemModel = shoe.shoeType?.split(" - ")[1] || "";
@@ -179,31 +187,39 @@ export default function OrderDetail({
             : rupiah(shoe.treatmentPrice);
 
         printer
-          .line(`${title} | ${shoe.treatment?.name || "-"}`)
-          .line(`${shoe.shoeCode}`, { align: Align.Right }) // Kode kecil di kanan
-          .line(price, { align: Align.Right, bold: true }); // Harga di kanan
+          .printText(t(title, { bold: true }))
+          .printText(t(`${shoe.treatment?.name || "-"} (${shoe.shoeCode})`))
+          .printText(t(price, { align: Align.Right, bold: true }));
       });
 
-      printer.line("--------------------------------");
+      printer.printText(t(LINE));
 
-      // Diskon & Total
       if (order.discountAmount > 0) {
         printer
-          .line(`Diskon (${order.promoNotes || "Promo"})`)
-          .line(`- ${rupiah(order.discountAmount)}`, { align: Align.Right });
+          .printText(t(`Diskon (${order.promoNotes || "Promo"})`))
+          .printText(
+            t(`- ${rupiah(order.discountAmount)}`, { align: Align.Right }),
+          );
       }
 
-      printer
-        .line("TOTAL", { bold: true })
-        .line(rupiah(order.totalPrice), { align: Align.Right, bold: true })
-        .line("--------------------------------")
-        .line(isPaid ? "LUNAS" : "BELUM LUNAS", {
-          align: Align.Center,
-          bold: true,
-        })
-        .line("Terima kasih", { align: Align.Center })
-        .line("Simpan struk ini untuk pengambilan", { align: Align.Center })
-        .line("--------------------------------")
+      await printer
+        .printText(t("TOTAL", { bold: true }))
+        .printText(
+          t(rupiah(order.totalPrice), { align: Align.Right, bold: true }),
+        )
+        .printText(t(LINE))
+        .printText(
+          t(isPaid ? "LUNAS" : "BELUM LUNAS", {
+            align: Align.Center,
+            bold: true,
+          }),
+        )
+        .printText(t("Terima kasih", { align: Align.Center }))
+        .printText(
+          t("Simpan struk ini untuk pengambilan", { align: Align.Center }),
+        )
+        .printText(t(LINE))
+        .newline(2)
         .cutPaper()
         .execute();
 
@@ -215,7 +231,7 @@ export default function OrderDetail({
     }
   };
 
-  // --- FUNGSI CETAK LABEL (DIPERBAIKI) ---
+  // --- CETAK LABEL ---
   const executePrintLabels = async () => {
     if (typeof navigator === "undefined" || !(navigator as any).bluetooth) {
       toast.error(
@@ -246,31 +262,23 @@ export default function OrderDetail({
             ? "FREE"
             : rupiah(shoe.treatmentPrice);
 
-        printer
+        await printer
           .initialize()
-          // Header
-          .line("CHAT SHOE TREATMENT", { align: Align.Center, bold: true })
-          .line(order.invoiceNumber, { align: Align.Center })
-          .line("--------------------------------")
-
-          // QR Code
-          .printQRCode({
-            data: shoe.qrCode,
-            size: 6,
-            align: Align.Center,
-          })
-          .line("--------------------------------")
-
-          // Detail Sepatu (TANPA TANDA |)
-          .line(title, { bold: true })
-          .line(`Treatment: ${shoe.treatment?.name || "-"}`)
-          .line(`Pelanggan: ${order.customer?.name || "-"}`)
-          .line(`Kode: ${shoe.shoeCode}`)
-          .line(`Harga: ${price}`)
-          .line(`Estimasi: ${calculateMaxEstimatedDate(order)}`)
-
-          // Footer
-          .line("--------------------------------")
+          .printText(
+            t("CHAT SHOE TREATMENT", { align: Align.Center, bold: true }),
+          )
+          .printText(t(order.invoiceNumber, { align: Align.Center }))
+          .printText(t(LINE))
+          .printQRCode({ data: shoe.qrCode, size: 6, align: Align.Center })
+          .printText(t(LINE))
+          .printText(t(title, { bold: true }))
+          .printText(t(`Treatment: ${shoe.treatment?.name || "-"}`))
+          .printText(t(`Pelanggan: ${order.customer?.name || "-"}`))
+          .printText(t(`Kode: ${shoe.shoeCode}`))
+          .printText(t(`Harga: ${price}`))
+          .printText(t(`Estimasi: ${calculateMaxEstimatedDate(order)}`))
+          .printText(t(LINE))
+          .newline(2)
           .cutPaper()
           .execute();
       }
