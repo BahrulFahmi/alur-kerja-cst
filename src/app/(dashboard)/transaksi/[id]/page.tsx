@@ -269,16 +269,14 @@ export default function OrderDetail({
           )
           .printText(t(order.invoiceNumber, { align: Align.Center }))
           .printText(t(LINE))
-          .printQRCode({ data: shoe.qrCode, size: 6, align: Align.Center })
-          .printText(t(LINE))
+          .printQRCode({ data: shoe.qrCode, size: 7, align: Align.Center })
           .printText(t(title, { bold: true }))
-          .printText(t(`Treatment: ${shoe.treatment?.name || "-"}`))
-          .printText(t(`Pelanggan: ${order.customer?.name || "-"}`))
           .printText(t(`Kode: ${shoe.shoeCode}`))
-          .printText(t(`Harga: ${price}`))
+          .printText(t(`Pelanggan: ${order.customer?.name || "-"}`))
+          .printText(t(`Treatment: ${shoe.treatment?.name || "-"}`))
           .printText(t(`Estimasi: ${calculateMaxEstimatedDate(order)}`))
           .printText(t(LINE))
-          .newline(2)
+          .newline(1)
           .cutPaper()
           .execute();
       }
@@ -539,10 +537,9 @@ export default function OrderDetail({
                           <QRCodeSVG value={shoe.qrCode} size={80} />
                         </div>
                         <div className="font-bold">{title}</div>
-                        <div>Treatment: {shoe.treatment?.name || "-"}</div>
-                        <div>Pelanggan: {order.customer?.name || "-"}</div>
                         <div>Kode: {shoe.shoeCode}</div>
-                        <div className="font-bold">Harga: {price}</div>
+                        <div>Pelanggan: {order.customer?.name || "-"}</div>
+                        <div>Treatment: {shoe.treatment?.name || "-"}</div>
                         <div>Estimasi: {calculateMaxEstimatedDate(order)}</div>
                       </div>
                     );
